@@ -38,6 +38,28 @@ export function przypiszOdczyty(pliki: string[], aparaty: { nazwa: string; rysun
   return pliki.map((plik) => dopasujAparat(plik, aparaty) ?? 0)
 }
 
+const jmKlucz = (j: string | null | undefined) => (j ?? '').toLowerCase().trim().replace(/\.$/, '')
+
+/**
+ * Cena usługi z oferty jest za jednostkę oferty. Gdy oferta jest ryczałtem ("1 kpl"), a w wycenie ilość jest w sztukach
+ * (np. "806 rurek"), cena pomnożona przez ilość byłaby wielokrotnie za wysoka - pozycja staje się "1 kpl" w cenie oferty,
+ * a pierwotna ilość trafia do uwag. Inna niezgodność jednostek (np. oferta za m², pozycja w kpl) - uwaga do sprawdzenia.
+ */
+export function ujednolicJednostkeUslugi(p: { ilosc: number; jm: string; uwagi?: string | null }, jmOferty?: string, iloscOferty?: number) {
+  if (!jmOferty) return
+  const jo = jmKlucz(jmOferty)
+  const jp = jmKlucz(p.jm)
+  if (jo === jp) return
+  const dopisz = (t: string) => { p.uwagi = [p.uwagi, t].filter(Boolean).join('; ') }
+  if (['kpl', 'komplet', 'ryczałt', 'usł', 'usługa', 'usluga'].includes(jo) && (iloscOferty ?? 1) <= 1) {
+    dopisz(`ilość w zapytaniu: ${p.ilosc} ${p.jm} - oferta ryczałtowa`)
+    p.ilosc = 1
+    p.jm = 'kpl'
+  } else {
+    dopisz(`jednostka oferty: ${jmOferty} - sprawdź ilość`)
+  }
+}
+
 /** Mediana wskaźników rbh/t (podobne projekty i wyceny) - odporna na pojedyncze nietypowe zlecenia. */
 export function medianaRbhT(wartosci: (number | null | undefined)[]): number | null {
   const l = wartosci.map(Number).filter((x) => Number.isFinite(x) && x > 0).sort((a, b) => a - b)

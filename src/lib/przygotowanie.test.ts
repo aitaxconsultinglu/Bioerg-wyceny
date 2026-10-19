@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { dobierzCene, type WierszCeny } from './bazaCen'
 import { pustaKarta, type KartaAnalizy } from './analiza'
-import { aparatyZKarty, dopasujAparat, klauzuleZAnalizy, medianaRbhT, przypiszOdczyty, punktyWeryfikacji, zmienneOferty, type KlauzulaBazy } from './przygotowanie'
+import { aparatyZKarty, dopasujAparat, ujednolicJednostkeUslugi, klauzuleZAnalizy, medianaRbhT, przypiszOdczyty, punktyWeryfikacji, zmienneOferty, type KlauzulaBazy } from './przygotowanie'
 import { nowyAparat, type PozycjaWyceny, type StanWyceny } from './wyceny'
 import type { ParametryKalk } from './kalkulacja'
 
@@ -141,5 +141,23 @@ describe('punkty do weryfikacji', () => {
     const p = punktyWeryfikacji(st, par, k)
     expect(p.map((x) => x.rodzaj)).toEqual(['masa', 'robocizna', 'cena', 'odczyt', 'niespojnosc', 'pytanie'])
     expect(p.find((x) => x.rodzaj === 'cena')!.opis).toContain('2 poz. bez ceny')
+  })
+})
+
+describe('jednostka usługi z oferty', () => {
+  it('oferta ryczałtowa (1 kpl) przy ilości w sztukach: pozycja 1 kpl, ilość do uwag', () => {
+    const p = { ilosc: 806, jm: 'szt.', uwagi: null as string | null }
+    ujednolicJednostkeUslugi(p, 'kpl', 1)
+    expect(p).toMatchObject({ ilosc: 1, jm: 'kpl' })
+    expect(p.uwagi).toContain('806 szt.')
+  })
+  it('ta sama jednostka bez zmian; inna (m²) tylko uwaga', () => {
+    const a = { ilosc: 3, jm: 'szt', uwagi: null as string | null }
+    ujednolicJednostkeUslugi(a, 'szt.', 10)
+    expect(a).toMatchObject({ ilosc: 3, jm: 'szt', uwagi: null })
+    const b = { ilosc: 1, jm: 'kpl', uwagi: null as string | null }
+    ujednolicJednostkeUslugi(b, 'm2', 60)
+    expect(b).toMatchObject({ ilosc: 1, jm: 'kpl' })
+    expect(b.uwagi).toMatch(/m2/)
   })
 })

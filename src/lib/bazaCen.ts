@@ -211,6 +211,9 @@ export interface WybranaCena {
   zrodlo_waznosc_do: string | null
   zrodlo_termin_dni: number | null
   zrodlo_id: string
+  /** Jednostka i ilość pozycji źródłowej (np. usługa wyceniona ryczałtem "1 kpl") - nie kopiowane do wyceny. */
+  jm_zrodla?: string
+  ilosc_zrodla?: number
 }
 
 /** Cena z wiersza bazy w mierze pozycji (zł/kg, zł/m, zł/szt); usługi - za jednostkę oferty. */
@@ -226,7 +229,7 @@ export function cenaZWiersza(w: WierszCeny, jednostka: JednostkaCeny, uslugi = f
   return {
     cena_jedn: Math.round(cena * 100) / 100, jednostka_ceny: j, zrodlo_ceny: w.zrodlo,
     zrodlo_opis: w.opis.slice(0, 200), zrodlo_dostawca: w.dostawca, zrodlo_data: w.data, zrodlo_waznosc_do: w.waznosc_do,
-    zrodlo_termin_dni: w.termin_dni, zrodlo_id: `${w.zrodlo}:${w.id_zrodla}:${w.pozycja_id}`,
+    zrodlo_termin_dni: w.termin_dni, zrodlo_id: `${w.zrodlo}:${w.id_zrodla}:${w.pozycja_id}`, jm_zrodla: w.jm, ilosc_zrodla: w.ilosc,
   }
 }
 

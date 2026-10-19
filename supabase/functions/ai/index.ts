@@ -154,48 +154,60 @@ Deno.serve(async (req) => {
     }
   }
 
-  try {
-    // Sonnet / Opus: server-side fallback przy odmowie klasyfikatora bezpieczeństwa (fallbacks: "default").
-    const zFallbackiem = !model.includes('haiku')
-    const parametry: Record<string, unknown> = {
-      model,
-      max_tokens: definicja.maxTokens,
-      system,
-      messages: wiadomosci,
-      output_config: { effort: definicja.effort, format: { type: 'json_schema', schema: schemat } },
-      ...(zFallbackiem ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}),
+  // Wywołanie modelu trwa do ~2 minut, a połączenie, którym przez ~60 s nic nie płynie, jest zamykane - wynik by przepadł,
+  // choć model go przygotował i koszt naliczono. Dlatego odpowiedź idzie strumieniem: co 10 s spacja (dozwolona przed JSON),
+  // na końcu wynik. Błędy tej fazy mają status HTTP 200 i pole "error" (klient sprawdza pole, nie tylko status).
+  const wywolajModel = async (): Promise<Record<string, unknown>> => {
+    try {
+      // Sonnet / Opus: server-side fallback przy odmowie klasyfikatora bezpieczeństwa (fallbacks: "default").
+      const zFallbackiem = !model.includes('haiku')
+      const parametry: Record<string, unknown> = {
+        model,
+        max_tokens: definicja.maxTokens,
+        system,
+        messages: wiadomosci,
+        output_config: { effort: definicja.effort, format: { type: 'json_schema', schema: schemat } },
+        ...(zFallbackiem ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}),
+      }
+      // deno-lint-ignore no-explicit-any
+      const odp = await (claude.beta.messages.create as any)(parametry) as Anthropic.Beta.BetaMessage
+      const usage = odp.usage as unknown as Record<string, number>
+      const usdKoszt = koszt(usage, ceny)
+      const wspolne = {
+        tokeny_wejscie: usage.input_tokens ?? 0, tokeny_wyjscie: usage.output_tokens ?? 0,
+        tokeny_cache_odczyt: usage.cache_read_input_tokens ?? 0, tokeny_cache_zapis: usage.cache_creation_input_tokens ?? 0,
+        koszt_usd: usdKoszt, koszt_pln: usdKoszt * kursUsd,
+      }
+      if (odp.stop_reason === 'refusal') {
+        await zapisz({ ...wspolne, status: 'odmowa_modelu', komunikat: odp.stop_details?.category ?? 'refusal' })
+        return { error: 'Model odmówił przetworzenia dokumentu. Spróbuj ponownie albo wprowadź dane ręcznie.', status_http: 422 }
+      }
+      if (odp.stop_reason === 'max_tokens') {
+        await zapisz({ ...wspolne, status: 'blad', komunikat: 'max_tokens' })
+        return { error: 'Odpowiedź przekroczyła limit długości - podziel dokument na mniejsze części.', status_http: 422 }
+      }
+      const blok = odp.content.find((b) => b.type === 'text') as { text: string } | undefined
+      let wynik: unknown
+      try { wynik = normalizujWynik(schemat, JSON.parse(blok?.text ?? '')) } catch {
+        await zapisz({ ...wspolne, status: 'blad', komunikat: 'nieprawidłowy JSON' })
+        return { error: 'Model zwrócił nieprawidłową odpowiedź. Spróbuj ponownie.', status_http: 502 }
+      }
+      await zapisz({ ...wspolne, status: 'ok', model: odp.model })
+      // W logach funkcji tylko metadane - nigdy treść dokumentu.
+      console.log(JSON.stringify({ tryb: zadanie.tryb, model: odp.model, ...wspolne, czas_ms: Date.now() - start }))
+      return { wynik, model: odp.model, koszt_pln: wspolne.koszt_pln, tokeny: wspolne }
+    } catch (e) {
+      const komunikat = e instanceof Anthropic.APIError ? `${e.status}: ${e.message}`.slice(0, 300) : String(e).slice(0, 300)
+      await zapisz({ status: 'blad', komunikat })
+      return { error: `Błąd Claude API (${komunikat}).`, status_http: e instanceof Anthropic.RateLimitError ? 429 : 502 }
     }
-    // deno-lint-ignore no-explicit-any
-    const odp = await (claude.beta.messages.create as any)(parametry) as Anthropic.Beta.BetaMessage
-    const usage = odp.usage as unknown as Record<string, number>
-    const usdKoszt = koszt(usage, ceny)
-    const wspolne = {
-      tokeny_wejscie: usage.input_tokens ?? 0, tokeny_wyjscie: usage.output_tokens ?? 0,
-      tokeny_cache_odczyt: usage.cache_read_input_tokens ?? 0, tokeny_cache_zapis: usage.cache_creation_input_tokens ?? 0,
-      koszt_usd: usdKoszt, koszt_pln: usdKoszt * kursUsd,
-    }
-    if (odp.stop_reason === 'refusal') {
-      await zapisz({ ...wspolne, status: 'odmowa_modelu', komunikat: odp.stop_details?.category ?? 'refusal' })
-      return odpowiedz({ error: 'Model odmówił przetworzenia dokumentu. Spróbuj ponownie albo wprowadź dane ręcznie.' }, 422)
-    }
-    if (odp.stop_reason === 'max_tokens') {
-      await zapisz({ ...wspolne, status: 'blad', komunikat: 'max_tokens' })
-      return odpowiedz({ error: 'Odpowiedź przekroczyła limit długości - podziel dokument na mniejsze części.' }, 422)
-    }
-    const blok = odp.content.find((b) => b.type === 'text') as { text: string } | undefined
-    let wynik: unknown
-    try { wynik = normalizujWynik(schemat, JSON.parse(blok?.text ?? '')) } catch {
-      await zapisz({ ...wspolne, status: 'blad', komunikat: 'nieprawidłowy JSON' })
-      return odpowiedz({ error: 'Model zwrócił nieprawidłową odpowiedź. Spróbuj ponownie.' }, 502)
-    }
-    await zapisz({ ...wspolne, status: 'ok', model: odp.model })
-    // W logach funkcji tylko metadane - nigdy treść dokumentu.
-    console.log(JSON.stringify({ tryb: zadanie.tryb, model: odp.model, ...wspolne, czas_ms: Date.now() - start }))
-    return odpowiedz({ wynik, model: odp.model, koszt_pln: wspolne.koszt_pln, tokeny: wspolne })
-  } catch (e) {
-    const komunikat = e instanceof Anthropic.APIError ? `${e.status}: ${e.message}`.slice(0, 300) : String(e).slice(0, 300)
-    await zapisz({ status: 'blad', komunikat })
-    const status = e instanceof Anthropic.RateLimitError ? 429 : 502
-    return odpowiedz({ error: `Błąd Claude API (${komunikat}).` }, status)
   }
+  const enc = new TextEncoder()
+  const strumien = new ReadableStream<Uint8Array>({
+    async start(k) {
+      const puls = setInterval(() => k.enqueue(enc.encode(' ')), 10_000)
+      try { k.enqueue(enc.encode(JSON.stringify(await wywolajModel()))) } finally { clearInterval(puls); k.close() }
+    },
+  })
+  return new Response(strumien, { headers: { ...NAGLOWKI_CORS, 'Content-Type': 'application/json' } })
 })

@@ -14,7 +14,7 @@ import { pozycjeZListy } from './importListy'
 import { dobierzCene, wczytajCeny } from './bazaCen'
 import { BUCKET } from './magazyn'
 import { klucz, nowyAparat, parametry, wczytajWycene, zapiszWycene, type PozycjaWyceny } from './wyceny'
-import { aparatyZKarty, dopasujAparat, klauzuleZAnalizy, medianaRbhT, przypiszOdczyty, punktyWeryfikacji, terminOferty, zmienneOferty, type KlauzulaBazy } from './przygotowanie'
+import { aparatyZKarty, dopasujAparat, ujednolicJednostkeUslugi, klauzuleZAnalizy, medianaRbhT, przypiszOdczyty, punktyWeryfikacji, terminOferty, zmienneOferty, type KlauzulaBazy } from './przygotowanie'
 import type { Gatunek, KategoriaMaterialu, KategoriaUslugi, RodzajStali, StawkaRobocizny, Ustawienia } from './types'
 import { dataPL, dzisiajISO } from './format'
 
@@ -264,8 +264,9 @@ export async function wykonajPrzygotowanie(
         wszystkich++
         const c = dobierzCene({ sekcja: p.sekcja ?? null, gatunek: p.gatunek, d_zew: p.d_zew, grubosc: p.grubosc, jednostka_ceny: p.jednostka_ceny }, wiersze, s.gatunki, uslugi, undefined, z.id)
         if (!c) continue
-        const { dopasowanie, ...cena } = c
+        const { dopasowanie, jm_zrodla, ilosc_zrodla, ...cena } = c
         Object.assign(p, cena)
+        if (uslugi) ujednolicJednostkeUslugi(p, jm_zrodla, ilosc_zrodla)
         if (dopasowanie === 'przyblizone') p.uwagi = [p.uwagi, 'cena przybliżona (kategoria + gatunek, bez wymiarów)'].filter(Boolean).join('; ')
         zCena++
       }
