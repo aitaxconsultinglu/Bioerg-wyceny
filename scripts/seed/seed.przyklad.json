@@ -1,0 +1,34 @@
+{
+  "_opis": "PRZYKŁAD (dane fikcyjne). Prawdziwą konfigurację trzymaj w prywatne/seed.json - poza repozytorium. Ścieżki plików względem FOLDER_MATERIALOW.",
+  "firma": {
+    "nazwa": "Przykładowa Firma Sp. z o.o.",
+    "miejscowosc": "Miasto",
+    "domeny": ["firma.example"],
+    "opis_dzialalnosci": "producent zbiorników i wymienników ciepła",
+    "logo": "prywatne/logo.png"
+  },
+  "klienci": [{ "nazwa": "Zakłady Przykładowe S.A.", "skrot": "ZAKPRZ" }],
+  "zapytania": [
+    {
+      "numer": "ZO/1/2026", "przedmiot": "Zbiornik buforowy V-101", "klient": "Zakłady Przykładowe S.A.",
+      "zrodlo": "mail", "status": "nowe", "utworzono": "2026-01-15",
+      "dokumenty": [
+        { "plik": "Zbiornik V-101/Specyfikacja.docx", "typ": "specyfikacja", "istotny": true },
+        { "plik": "Zbiornik V-101/Rysunek V-101.pdf", "typ": "rysunek", "istotny": true }
+      ]
+    },
+    {
+      "numer": { "rok": 2026 }, "przedmiot": "Wymiennik W-1", "klient": "Zakłady Przykładowe S.A.", "zrodlo": "mail", "status": "w_analizie",
+      "dokumenty": [],
+      "mail": { "plik": "Zapytanie W-1.eml", "pomin": "Obliczenia" }
+    }
+  ],
+  "oferty": [{ "plik": "Zbiornik V-101/Oferta blachy.pdf", "zo": "ZO/1/2026" }],
+  "karty": [{ "plik": "karta dostawy.XLS", "tytul": "Zbiornik V-50", "typ": "zbiornik pionowy" }],
+  "registo": "Registo/Raport.xlsx",
+  "wyceny": {
+    "arkusze": [{ "plik": "wycena W-1.xls", "rok": 2025, "klient": "Zakłady Przykładowe S.A.", "typ": "wymiennik płaszczowo-rurowy", "material": "304L" }],
+    "kalkulacje": [{ "kalk": "Zbiornik V-101/Kalkulacja.xlsx", "notatka": "Zbiornik V-101/Wycena.docx", "przedmiot": "Zbiornik buforowy V-101", "typ": "zbiornik pionowy" }],
+    "notatki": [{ "plik": "Wymiennik W-1/Wycena.docx", "przedmiot": "Wymiennik W-1", "typ": "wymiennik płaszczowo-rurowy", "material": "P265GH" }]
+  }
+}

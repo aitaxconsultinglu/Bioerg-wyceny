@@ -1,0 +1,3 @@
+#!/bin/sh
+# Komunikat commita też jest publiczny - bez nazw firmy, klientów i dostawców.
+exec node scripts/sprawdz-pliki.mjs --wiadomosc "$1"

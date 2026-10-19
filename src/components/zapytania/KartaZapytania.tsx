@@ -1,0 +1,246 @@
+import { useCallback, useEffect, useState } from 'react'
+import { ArrowLeft, Copy, Plus, Save, Sparkles } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import { komunikatPL } from '@/lib/config'
+import { dataGodzinaPL, zl } from '@/lib/format'
+import { cn } from '@/lib/utils'
+import { STATUSY_ZAPYTANIA, ZRODLA, type StatusZapytania } from '@/lib/zapytania'
+import { ETYKIETY_STATUSU_WYCENY, KOLORY_STATUSU_WYCENY, type StatusWyceny } from '@/lib/wyceny'
+import { uprawnienia, type Profil } from '@/lib/types'
+import { Button } from '../ui/button'
+import { Komunikat } from '../ui/komunikat'
+import { DokumentyZapytania } from './DokumentyZapytania'
+import { OfertyDoZapytania } from '../oferty/OfertyDoZapytania'
+import { KartaAnalizy } from './KartaAnalizy'
+import { RysunkiZapytania } from '../rysunki/RysunkiZapytania'
+import { ZapytaniaDoDostawcow } from '../zapytaniaDostawcow/ZapytaniaDoDostawcow'
+import { PrzygotowanieAutomatyczne } from './PrzygotowanieAutomatyczne'
+import { FLAGA_PRZYGOTUJ } from './NoweZMaila'
+
+interface Zapytanie {
+  id: string; numer: string; klient_id: string | null; przedmiot: string; nr_zapytania_klienta: string | null
+  nr_zapotrzebowania: string | null; zrodlo: string; link_platformy: string | null; termin_oferty: string | null
+  termin_pytan: string | null; prowadzacy: string | null; status: StatusZapytania; uwagi: string | null; zmodyfikowano: string
+}
+interface WersjaWyceny { id: string; wersja: number; nazwa: string | null; status: StatusWyceny; utworzono: string; zatwierdzono: string | null; skopiowana_z: string | null }
+
+type Zakladka = 'dokumenty' | 'rysunki' | 'analiza' | 'wyceny' | 'dostawcy' | 'oferty' | 'historia'
+
+/** "2026-11-09T12:00:00+01:00" -> wartość pola datetime-local w czasie lokalnym. */
+function doPola(iso: string | null) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
+}
+const zPola = (v: string) => (v ? new Date(v).toISOString() : null)
+
+export function KartaZapytania({ id, profil, zamknij, otworzWycene }: { id: string; profil: Profil; zamknij: () => void; otworzWycene: (id: string) => void }) {
+  const up = uprawnienia(profil)
+  const [z, setZ] = useState<Zapytanie | null>(null)
+  const [klienci, setKlienci] = useState<{ id: string; nazwa: string }[]>([])
+  const [ludzie, setLudzie] = useState<{ id: string; nazwa: string }[]>([])
+  const [wersje, setWersje] = useState<WersjaWyceny[]>([])
+  const [ceny, setCeny] = useState<Record<string, number | null>>({})
+  const [zakladka, setZakladka] = useState<Zakladka>('dokumenty')
+  // Przejście z karty analizy do zapytań do dostawców otwiera generator z usługami z karty.
+  const [generatorZAnalizy, setGeneratorZAnalizy] = useState(false)
+  // Zapytanie założone z maila z opcją "od razu przygotuj" - okno otwiera się samo.
+  const [przygotowanie, setPrzygotowanie] = useState<'reczne' | 'po_imporcie' | null>(() => {
+    try {
+      if (sessionStorage.getItem(FLAGA_PRZYGOTUJ) === id) { sessionStorage.removeItem(FLAGA_PRZYGOTUJ); return 'po_imporcie' }
+    } catch { /* bez sessionStorage - przycisk w nagłówku */ }
+    return null
+  })
+  const [zmieniony, setZmieniony] = useState(false)
+  const [blad, setBlad] = useState<string | null>(null)
+  const [info, setInfo] = useState<string | null>(null)
+  const [historia, setHistoria] = useState<{ id: number; tabela: string; akcja: string; user_email: string | null; czas: string; zmiany: Record<string, unknown> }[]>([])
+
+  const wczytaj = useCallback(async () => {
+    const [{ data, error }, kl, lu, wy] = await Promise.all([
+      supabase.from('zapytania').select('*').eq('id', id).single(),
+      supabase.from('klienci').select('id, nazwa').order('nazwa'),
+      supabase.rpc('lista_pracownikow'),
+      supabase.from('wyceny').select('id, wersja, nazwa, status, utworzono, zatwierdzono, skopiowana_z').eq('zapytanie_id', id).order('wersja', { ascending: false }),
+    ])
+    if (error) { setBlad(komunikatPL(error.message)); return }
+    setZ(data as Zapytanie); setZmieniony(false)
+    setKlienci(kl.data ?? []); setLudzie((lu.data ?? []) as { id: string; nazwa: string }[])
+    const w = (wy.data ?? []) as WersjaWyceny[]
+    setWersje(w)
+    const c: Record<string, number | null> = {}
+    for (const x of w.filter((x) => x.status === 'zatwierdzona')) {
+      const { data: cz } = await supabase.rpc('cena_zatwierdzona', { p_wycena: x.id })
+      c[x.id] = (cz as { cena_koncowa: number }[] | null)?.[0]?.cena_koncowa ?? null
+    }
+    setCeny(c)
+  }, [id])
+  useEffect(() => { void wczytaj() }, [wczytaj])
+
+  useEffect(() => {
+    if (zakladka !== 'historia') return
+    void supabase.from('audit_log').select('id, tabela, akcja, user_email, czas, zmiany').eq('zapytanie_id', id).order('czas', { ascending: false }).limit(200)
+      .then(({ data }) => setHistoria((data ?? []) as typeof historia))
+  }, [zakladka, id])
+
+  if (!z) return <p className="text-slate-500">{blad ?? 'Wczytywanie...'}</p>
+  const ust = (zm: Partial<Zapytanie>) => { setZ({ ...z, ...zm }); setZmieniony(true); setInfo(null) }
+
+  async function zapisz() {
+    if (!z) return
+    setBlad(null)
+    const { id: _id, zmodyfikowano: _m, ...dane } = z
+    void _id; void _m
+    const { error } = await supabase.from('zapytania').update(dane).eq('id', z.id)
+    if (error) { setBlad(komunikatPL(error.message)); return }
+    setInfo('Zapisano.'); await wczytaj()
+  }
+
+  async function dodajKlienta() {
+    const nazwa = window.prompt('Nazwa nowego klienta:')
+    if (!nazwa?.trim()) return
+    const { data, error } = await supabase.from('klienci').insert({ nazwa: nazwa.trim() }).select('id, nazwa').single()
+    if (error) { setBlad(komunikatPL(error.message)); return }
+    setKlienci([...klienci, data].sort((a, b) => a.nazwa.localeCompare(b.nazwa)))
+    ust({ klient_id: data.id })
+  }
+
+  async function nowaWycena() {
+    const { data, error } = await supabase.rpc('nowa_wycena', { p_zapytanie: id, p_nazwa: null })
+    if (error) { setBlad(komunikatPL(error.message)); return }
+    if (z && ['nowe', 'w_analizie', 'zapytania_do_dostawcow'].includes(z.status)) await supabase.from('zapytania').update({ status: 'kalkulacja' }).eq('id', id)
+    otworzWycene(data as string)
+  }
+
+  async function kopiuj(w: WersjaWyceny) {
+    const { data, error } = await supabase.rpc('kopiuj_wycene', { p_wycena: w.id })
+    if (error) { setBlad(komunikatPL(error.message)); return }
+    otworzWycene(data as string)
+  }
+
+  const pole = 'pole'
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button rozmiar="maly" wariant="cichy" onClick={zamknij}><ArrowLeft className="h-4 w-4" /> Lista</Button>
+        <h2 className="text-lg font-semibold">{z.numer}</h2>
+        <span className="text-slate-600">{z.przedmiot}</span>
+        <Button rozmiar="maly" wariant="akcent" className="ml-auto" onClick={() => setPrzygotowanie('reczne')}
+          title="Analiza zapytania, listy z rysunków, wstępna wycena i projekt oferty - do weryfikacji">
+          <Sparkles className="h-4 w-4" /> Przygotuj automatycznie
+        </Button>
+      </div>
+      <PrzygotowanieAutomatyczne
+        otwarty={!!przygotowanie} odRazu={przygotowanie === 'po_imporcie'} zamknij={() => setPrzygotowanie(null)}
+        zapytanie={{ id, numer: z.numer, przedmiot: z.przedmiot, klient: klienci.find((k) => k.id === z.klient_id)?.nazwa ?? null, klient_id: z.klient_id, nr_zapytania_klienta: z.nr_zapytania_klienta, termin_oferty: z.termin_oferty, status: z.status }}
+        widziMarze={up.widziMarze} otworzWycene={otworzWycene} otworzZakladke={(k) => { setGeneratorZAnalizy(false); setZakladka(k) }}
+        poZakonczeniu={() => void wczytaj()}
+      />
+      {blad && <Komunikat rodzaj="blad">{blad}</Komunikat>}
+      {info && <Komunikat rodzaj="sukces">{info}</Komunikat>}
+
+      <section className="sekcja space-y-3">
+        <div className="flex flex-wrap gap-3">
+          <label className="w-40"><span className="etykieta">Numer ZO</span><input className={pole} value={z.numer} onChange={(e) => ust({ numer: e.target.value })} /></label>
+          <label className="min-w-[20rem] flex-1"><span className="etykieta">Przedmiot zapytania</span><input className={pole} value={z.przedmiot} onChange={(e) => ust({ przedmiot: e.target.value })} /></label>
+          <label className="w-64"><span className="etykieta">Klient</span>
+            <div className="flex gap-1">
+              <select className={pole} value={z.klient_id ?? ''} onChange={(e) => ust({ klient_id: e.target.value || null })}>
+                <option value="">-</option>{klienci.map((k) => <option key={k.id} value={k.id}>{k.nazwa}</option>)}
+              </select>
+              <Button rozmiar="maly" title="Nowy klient" onClick={() => void dodajKlienta()}><Plus className="h-3 w-3" /></Button>
+            </div></label>
+          <label className="w-48"><span className="etykieta">Status</span>
+            <select className={pole} value={z.status} onChange={(e) => ust({ status: e.target.value as StatusZapytania })}>
+              {STATUSY_ZAPYTANIA.map((s) => <option key={s.id} value={s.id}>{s.etykieta}</option>)}
+            </select></label>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <label className="w-48"><span className="etykieta">Nr zapytania klienta</span><input className={pole} value={z.nr_zapytania_klienta ?? ''} onChange={(e) => ust({ nr_zapytania_klienta: e.target.value || null })} /></label>
+          <label className="w-48"><span className="etykieta">Nr zapotrzebowania</span><input className={pole} value={z.nr_zapotrzebowania ?? ''} onChange={(e) => ust({ nr_zapotrzebowania: e.target.value || null })} /></label>
+          <label className="w-44"><span className="etykieta">Źródło</span>
+            <select className={pole} value={z.zrodlo} onChange={(e) => ust({ zrodlo: e.target.value })}>
+              {Object.entries(ZRODLA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select></label>
+          {z.zrodlo === 'platforma' && (
+            <label className="w-72"><span className="etykieta">Link do platformy</span><input className={pole} value={z.link_platformy ?? ''} onChange={(e) => ust({ link_platformy: e.target.value || null })} /></label>
+          )}
+          <label className="w-56"><span className="etykieta">Termin złożenia oferty</span><input type="datetime-local" className={pole} value={doPola(z.termin_oferty)} onChange={(e) => ust({ termin_oferty: zPola(e.target.value) })} /></label>
+          <label className="w-56"><span className="etykieta">Termin zadawania pytań</span><input type="datetime-local" className={pole} value={doPola(z.termin_pytan)} onChange={(e) => ust({ termin_pytan: zPola(e.target.value) })} /></label>
+          <label className="w-56"><span className="etykieta">Osoba prowadząca</span>
+            <select className={pole} value={z.prowadzacy ?? ''} onChange={(e) => ust({ prowadzacy: e.target.value || null })}>
+              <option value="">-</option>{ludzie.map((l) => <option key={l.id} value={l.id}>{l.nazwa}</option>)}
+            </select></label>
+        </div>
+        <label className="block"><span className="etykieta">Uwagi</span><textarea className="pole h-16" value={z.uwagi ?? ''} onChange={(e) => ust({ uwagi: e.target.value || null })} /></label>
+        <Button wariant="glowny" disabled={!zmieniony} onClick={() => void zapisz()}><Save className="h-4 w-4" /> Zapisz zapytanie</Button>
+      </section>
+
+      <div className="flex flex-wrap gap-1 border-b border-slate-200">
+        {([['dokumenty', 'Dokumenty'], ['rysunki', 'Rysunki i listy'], ['analiza', 'Karta analizy'], ['wyceny', `Wyceny (${wersje.length})`], ['dostawcy', 'Zapytania do dostawców'], ['oferty', 'Oferty dostawców'], ['historia', 'Historia zmian']] as [Zakladka, string][]).map(([k, et]) => (
+          <button key={k} onClick={() => { setZakladka(k); setGeneratorZAnalizy(false) }}
+            className={cn('-mb-px rounded-t-md border px-3 py-1.5 text-sm', zakladka === k ? 'border-slate-200 border-b-white bg-white font-medium' : 'border-transparent text-slate-600 hover:bg-slate-100')}>{et}</button>
+        ))}
+      </div>
+
+      {zakladka === 'dokumenty' && <DokumentyZapytania zapytanieId={id} numer={z.numer} profil={profil} />}
+      {zakladka === 'rysunki' && <RysunkiZapytania zapytanieId={id} numer={z.numer} profil={profil} otworzWycene={otworzWycene} />}
+      {zakladka === 'analiza' && (
+        <KartaAnalizy
+          zapytanie={{ id, numer: z.numer, przedmiot: z.przedmiot, klient: klienci.find((k) => k.id === z.klient_id)?.nazwa ?? null, nr_zapytania_klienta: z.nr_zapytania_klienta, termin_oferty: z.termin_oferty, status: z.status }}
+          profil={profil} otworzWycene={otworzWycene} poZmianieZapytania={() => void wczytaj()}
+          otworzZakladke={(k) => { setGeneratorZAnalizy(k === 'dostawcy'); setZakladka(k) }}
+        />
+      )}
+      {zakladka === 'dostawcy' && <ZapytaniaDoDostawcow zapytanieId={id} numer={z.numer} profil={profil} zrodloStartowe={generatorZAnalizy ? 'analiza' : undefined} />}
+      {zakladka === 'oferty' && <OfertyDoZapytania zapytanieId={id} />}
+      {zakladka === 'wyceny' && (
+        <div className="space-y-3">
+          <Button wariant="glowny" onClick={() => void nowaWycena()}><Plus className="h-4 w-4" /> Nowa wycena</Button>
+          <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+            <table className="w-full border-collapse">
+              <thead><tr>{['Wersja', 'Nazwa', 'Status', 'Utworzono', 'Zatwierdzono', 'Cena końcowa', ''].map((n) => <th key={n} className="komorka-naglowek">{n}</th>)}</tr></thead>
+              <tbody>
+                {wersje.map((w) => (
+                  <tr key={w.id} className="cursor-pointer hover:bg-slate-50" onClick={() => otworzWycene(w.id)}>
+                    <td className="komorka font-medium">v{w.wersja}{w.skopiowana_z && <span className="ml-1 text-xs text-slate-400">(kopia)</span>}</td>
+                    <td className="komorka">{w.nazwa}</td>
+                    <td className="komorka"><span className={cn('znacznik', KOLORY_STATUSU_WYCENY[w.status])}>{ETYKIETY_STATUSU_WYCENY[w.status]}</span></td>
+                    <td className="komorka text-sm">{dataGodzinaPL(w.utworzono)}</td>
+                    <td className="komorka text-sm">{dataGodzinaPL(w.zatwierdzono)}</td>
+                    <td className="komorka liczba">{ceny[w.id] != null ? `${zl(ceny[w.id])} zł` : ''}</td>
+                    <td className="komorka" onClick={(e) => e.stopPropagation()}>
+                      <Button rozmiar="maly" title="Skopiuj jako nową wersję" onClick={() => void kopiuj(w)}><Copy className="h-4 w-4" /> Kopiuj</Button>
+                    </td>
+                  </tr>
+                ))}
+                {wersje.length === 0 && <tr><td colSpan={7} className="komorka text-center text-slate-500">Brak wycen - kliknij „Nowa wycena”.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+          {!up.widziMarze && <p className="text-xs text-slate-500">Cenę końcową widać dopiero po zatwierdzeniu przez prezesa.</p>}
+        </div>
+      )}
+      {zakladka === 'historia' && (
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+          <table className="w-full border-collapse">
+            <thead><tr>{['Kiedy', 'Kto', 'Co', 'Zmiany'].map((n) => <th key={n} className="komorka-naglowek">{n}</th>)}</tr></thead>
+            <tbody>
+              {historia.map((h) => (
+                <tr key={h.id}>
+                  <td className="komorka whitespace-nowrap text-sm">{dataGodzinaPL(h.czas)}</td>
+                  <td className="komorka text-sm">{h.user_email ?? 'system'}</td>
+                  <td className="komorka text-sm">{h.tabela} - {h.akcja}</td>
+                  <td className="komorka font-mono text-xs text-slate-600">
+                    {h.akcja === 'update' ? Object.entries(h.zmiany).map(([k, v]) => `${k}: ${JSON.stringify((v as { z: unknown }).z)} → ${JSON.stringify((v as { na: unknown }).na)}`).join('; ').slice(0, 300) : ''}
+                  </td>
+                </tr>
+              ))}
+              {historia.length === 0 && <tr><td colSpan={4} className="komorka text-center text-slate-500">Brak zmian.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}

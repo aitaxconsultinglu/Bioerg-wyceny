@@ -1,0 +1,31 @@
+# Repozytorium jest publiczne (GitHub Pages). Żadnych danych firmowych: nazw firmy, klientów i dostawców,
+# dokumentów, rysunków, cen, ofert, kart dostawy ani raportów Registo.
+# Dane testowe ładuje lokalnie scripts/seed/ prosto z dysku do Supabase.
+
+# Wszystko, co dotyczy konkretnej firmy (konfiguracja seeda i testów lokalnych, logo, specyfikacja,
+# lista słów zakazanych dla hooka) - tylko lokalnie.
+prywatne/
+
+*.pdf
+*.xls
+*.xlsx
+*.xlsm
+*.msg
+*.eml
+*.docx
+*.doc
+*.zip
+*.csv
+!public/**
+
+# Klucze i sekrety - tylko lokalnie i w sekretach funkcji Supabase
+.env
+.env.*
+!.env.example
+
+node_modules
+dist
+*.tsbuildinfo
+supabase/.temp/
+supabase/.branches/
+.claude/settings.local.json

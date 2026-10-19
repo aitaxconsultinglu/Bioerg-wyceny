@@ -1,0 +1,3 @@
+#!/bin/sh
+# Włączenie: npm run przygotuj  (git config core.hooksPath .githooks)
+exec node scripts/sprawdz-pliki.mjs
