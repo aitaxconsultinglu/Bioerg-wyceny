@@ -240,16 +240,19 @@ export interface PozycjaDoCeny {
 
 /**
  * Automatyczny dobór ceny (wstępna wycena): ta sama kategoria, gatunek z równoważnikami i wymiary ±15%.
- * Kolejność: ważne oferty (najnowsze) → zakupy (najnowsze) → przeterminowane oferty. Gdy wymiarów nie ma
- * w bazie, dla cen za kg wystarcza kategoria + gatunek (dopasowanie przybliżone). Brak kategorii = brak ceny.
+ * Kolejność: oferty zebrane do tego zapytania (`zapytanieId`) → ważne oferty (najnowsze) → zakupy (najnowsze)
+ * → przeterminowane oferty. Gdy wymiarów nie ma w bazie, dla cen za kg wystarcza kategoria + gatunek
+ * (dopasowanie przybliżone). Brak kategorii = brak ceny.
  */
-export function dobierzCene(p: PozycjaDoCeny, wiersze: WierszCeny[], gatunki: Gatunek[], uslugi = false, dzis = new Date().toISOString().slice(0, 10))
+export function dobierzCene(p: PozycjaDoCeny, wiersze: WierszCeny[], gatunki: Gatunek[], uslugi = false, dzis = new Date().toISOString().slice(0, 10), zapytanieId: string | null = null)
   : (WybranaCena & { dopasowanie: 'dokladne' | 'przyblizone' }) | null {
   if (!p.sekcja) return null
   const zakres = uslugi ? wiersze.filter((w) => w.kategoria_uslugi) : wiersze.filter((w) => !w.kategoria_uslugi)
   const miara = (w: WierszCeny) => (uslugi ? w.wartosc_pln
     : p.jednostka_ceny === 'kg' ? w.cena_pln_kg : p.jednostka_ceny === 'm' ? w.cena_pln_m : w.cena_pln_szt)
-  const ranga = (w: WierszCeny) => (w.zrodlo === 'oferta' && (!w.waznosc_do || w.waznosc_do >= dzis) ? 0 : w.zrodlo === 'zakup' ? 1 : 2)
+  // Oferta do tego zapytania to cena "bieżąca" (dział handlowy zebrał ją właśnie na tę wycenę) - także po terminie ważności.
+  const ranga = (w: WierszCeny) => (zapytanieId && w.zrodlo === 'oferta' && w.zapytanie_id === zapytanieId ? -1
+    : w.zrodlo === 'oferta' && (!w.waznosc_do || w.waznosc_do >= dzis) ? 0 : w.zrodlo === 'zakup' ? 1 : 2)
   const proby: { d_zew: number | null; grubosc: number | null; dopasowanie: 'dokladne' | 'przyblizone' }[] = [
     { d_zew: p.d_zew ?? null, grubosc: p.grubosc ?? null, dopasowanie: 'dokladne' },
     ...(!uslugi && p.jednostka_ceny === 'kg' && (p.d_zew || p.grubosc) ? [{ d_zew: null, grubosc: null, dopasowanie: 'przyblizone' as const }] : []),

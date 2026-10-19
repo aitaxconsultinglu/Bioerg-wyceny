@@ -5,8 +5,8 @@ import { komunikatPL } from '@/lib/config'
 import { useSlowniki } from '@/lib/slowniki'
 import { rozmiar } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { ETYKIETY_TYPU, splaszczArchiwa, wczytajPlik, type TypDokumentu, type WczytanyPlik } from '@/lib/dokumenty'
-import { zapiszDokument } from '@/lib/magazyn'
+import { ETYKIETY_TYPU, splaszczArchiwa, wczytajPlik, type PominietyZalacznik, type TypDokumentu, type WczytanyPlik } from '@/lib/dokumenty'
+import { NIEISTOTNY_TYLKO_TEKST_MB, zapiszDokument } from '@/lib/magazyn'
 import { domyslnieIstotny, propozycjaZapytania, STRON_DLUGI_DOKUMENT, type KlientImportu, type PropozycjaZapytania } from '@/lib/importMaila'
 import { Button } from '../ui/button'
 import { Komunikat } from '../ui/komunikat'
@@ -99,6 +99,7 @@ export function NoweZMaila({ otwarty, zamknij, utworzone }: { otwarty: boolean; 
   }
 
   const ustP = (z: Partial<PropozycjaZapytania>) => setP((x) => (x ? { ...x, ...z } : x))
+  const pominiete = (mail?.metadane.pominiete_zalaczniki as PominietyZalacznik[] | undefined) ?? []
   return (
     <Dialog open={otwarty} onOpenChange={(o) => { if (!o) { wyczysc(); zamknij() } }}>
       <DialogContent className="max-w-3xl">
@@ -148,13 +149,15 @@ export function NoweZMaila({ otwarty, zamknij, utworzone }: { otwarty: boolean; 
                 )}
               </div>
               <div>
-                <span className="etykieta">Załączniki ({zalaczniki.length}) - typ i czy idą do analizy
+                <span className="etykieta">Załączniki ({zalaczniki.filter((z) => z.wgraj !== false).length} z {zalaczniki.length} do wgrania, {rozmiar(zalaczniki.filter((z) => z.wgraj !== false).reduce((n, z) => n + z.rozmiar, 0))}) - typ i czy idą do analizy
                   <span className="ml-1 font-normal text-slate-400">(obliczenia powyżej {STRON_DLUGI_DOKUMENT} str. domyślnie pominięte - zaznacz, jeśli to jedyne dane projektowe)</span></span>
                 <div className="max-h-56 overflow-auto rounded border border-slate-200">
                   <table className="w-full border-collapse text-sm">
                     <tbody>
                       {zalaczniki.map((z, i) => (
-                        <tr key={i} className={cn(!z.istotny && 'text-slate-400')}>
+                        <tr key={i} className={cn((!z.istotny || z.wgraj === false) && 'text-slate-400', z.wgraj === false && 'line-through')}>
+                          <td className="komorka w-20 text-xs" title="Odznacz, jeśli to nie jest dokument zapytania (logo, stopka, reklama) - plik nie trafi do bazy">
+                            <label className="flex items-center gap-1"><input type="checkbox" checked={z.wgraj !== false} onChange={(e) => setZalaczniki(zalaczniki.map((x, j) => (j === i ? { ...x, wgraj: e.target.checked } : x)))} /> wgraj</label></td>
                           <td className="komorka"><Paperclip className="mr-1 inline h-3 w-3" />{z.nazwa}
                             <span className="ml-1 text-xs text-slate-400">{rozmiar(z.rozmiar)}{z.metadane?.stron ? `, ${String(z.metadane.stron)} str.` : ''}{z.metadane?.skan ? ', skan' : ''}</span></td>
                           <td className="komorka w-44"><select className="pole-komorki text-xs" value={z.typSugerowany} onChange={(e) => setZalaczniki(zalaczniki.map((x, j) => (j === i ? { ...x, typSugerowany: e.target.value as TypDokumentu } : x)))}>
@@ -166,6 +169,11 @@ export function NoweZMaila({ otwarty, zamknij, utworzone }: { otwarty: boolean; 
                     </tbody>
                   </table>
                 </div>
+                {pominiete.length > 0 && (
+                  <p className="mt-1 text-xs text-slate-500">Pominięte automatycznie ({pominiete.length}): {pominiete.map((x) => `${x.nazwa} (${rozmiar(x.rozmiar)}, ${x.powod})`).join('; ')}.</p>
+                )}
+                <p className="mt-1 text-xs text-slate-500">Z maila zapisuje się sama treść (tekst) i zaznaczone pliki - nie cały plik .msg/.eml.
+                  Nieistotne pliki powyżej {NIEISTOTNY_TYLKO_TEKST_MB} MB zapisują się jako tekst.</p>
               </div>
               <label className="flex items-start gap-2 rounded border border-blekit bg-blekit-jasny/40 p-2 text-sm">
                 <input type="checkbox" className="mt-1" checked={przygotuj} onChange={(e) => setPrzygotuj(e.target.checked)} />

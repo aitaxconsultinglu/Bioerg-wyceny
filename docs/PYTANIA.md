@@ -77,7 +77,7 @@ Repozytorium jest publiczne: pytania nie zawierają nazw firmy, klientów, dosta
       (bez tego link „nie pamiętam hasła” nie zadziała).
     *Zabezpieczenie na czas przejściowy: konto założone samodzielnie nie dostaje profilu, więc nie widzi żadnych danych
     i nie może wywołać AI (sprawdza test bezpieczeństwa).*
-30. **Sekret `ANTHROPIC_API_KEY`** - dodany pod inną nazwą; działa, ale warto go nazwać `ANTHROPIC_API_KEY`.
+30. ~~Sekret `ANTHROPIC_API_KEY`~~ - *załatwione: nowy klucz pod właściwą nazwą (2026-10-19).*
 31. **Lista e-maili pierwszych użytkowników i ich role.**
 32. **Nazwa repozytorium i adres aplikacji.** Adres GitHub Pages zawiera nazwę repozytorium. Po zmianie nazwy repozytorium
     trzeba uaktualnić Site URL i Redirect URLs w Supabase (pkt 29).

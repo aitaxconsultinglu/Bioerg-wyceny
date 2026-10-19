@@ -262,7 +262,7 @@ export async function wykonajPrzygotowanie(
       for (const p of a.pozycje) {
         const uslugi = p.zakladka !== 'materialy'
         wszystkich++
-        const c = dobierzCene({ sekcja: p.sekcja ?? null, gatunek: p.gatunek, d_zew: p.d_zew, grubosc: p.grubosc, jednostka_ceny: p.jednostka_ceny }, wiersze, s.gatunki, uslugi)
+        const c = dobierzCene({ sekcja: p.sekcja ?? null, gatunek: p.gatunek, d_zew: p.d_zew, grubosc: p.grubosc, jednostka_ceny: p.jednostka_ceny }, wiersze, s.gatunki, uslugi, undefined, z.id)
         if (!c) continue
         const { dopasowanie, ...cena } = c
         Object.assign(p, cena)
@@ -271,14 +271,18 @@ export async function wykonajPrzygotowanie(
       }
     }
 
-    // Robocizna wskaźnikowa: mediana rbh/t z podobnych projektów i wycen, domyślna stawka.
+    // Robocizna wskaźnikowa: mediana rbh/t z podobnych projektów (Registo), wycen wskaźnikowych i zatwierdzonych wycen
+    // tego typu aparatu (rbh/t z ich podsumowania - także wycen liczonych szczegółowo), domyślna stawka.
     const stawka = s.stawki.find((x) => x.domyslna && x.aktywna)?.stawka ?? null
     for (const a of st.aparaty) {
-      const [{ data: pr }, { data: ap }] = await Promise.all([
+      const [{ data: pr }, { data: ap }, { data: zatw }] = await Promise.all([
         a.typ ? db.from('projekty_podsumowanie').select('rbh_na_t').eq('typ_aparatu', a.typ).limit(50) : db.from('projekty_podsumowanie').select('rbh_na_t').limit(50),
         a.typ ? db.from('aparaty').select('wskaznik_rbh_t').eq('typ', a.typ).eq('metoda_robocizny', 'wskaznikowa').not('wskaznik_rbh_t', 'is', null).limit(50) : Promise.resolve({ data: [] as { wskaznik_rbh_t: number }[] }),
+        a.typ ? db.from('aparaty').select('nazwa, wyceny!inner(status, podsumowanie)').eq('typ', a.typ).eq('wyceny.status', 'zatwierdzona').limit(50) : Promise.resolve({ data: [] }),
       ])
-      a.wskaznik_rbh_t = medianaRbhT([...(pr ?? []).map((x) => x.rbh_na_t), ...(ap ?? []).map((x) => x.wskaznik_rbh_t)])
+      const zHistorii = ((zatw ?? []) as unknown as { nazwa: string; wyceny: { podsumowanie: { aparaty?: { nazwa: string; rbh_na_t: number | null }[] } | null } }[])
+        .map((x) => x.wyceny.podsumowanie?.aparaty?.find((y) => y.nazwa === x.nazwa)?.rbh_na_t ?? null)
+      a.wskaznik_rbh_t = medianaRbhT([...(pr ?? []).map((x) => x.rbh_na_t), ...(ap ?? []).map((x) => x.wskaznik_rbh_t), ...zHistorii])
       a.stawka_wskaznikowa = stawka === null ? null : Number(stawka)
     }
 

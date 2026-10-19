@@ -7,6 +7,8 @@ import type { TypDokumentu, WczytanyPlik } from './dokumenty'
 
 export const BUCKET = 'dokumenty'
 const WAZNOSC_LINKU_S = 60
+/** Plik nieistotny (np. długie obliczenia, standard klienta) większy niż tyle MB - zapisujemy sam tekst (miejsce planu). */
+export const NIEISTOTNY_TYLKO_TEKST_MB = 2
 
 export interface Powiazanie {
   zapytanie_id?: string | null
@@ -24,9 +26,10 @@ export function bezpiecznaNazwa(nazwa: string) {
 }
 
 /**
- * Zapisuje dokument. Mail: tylko tekst (stan "tylko_tekst"), a załączniki rekurencyjnie jako
- * osobne dokumenty powiązane z mailem. Plik większy niż limit planu: zapisujemy tekst i stan
- * "pominiety_limit" z czytelnym komunikatem dla użytkownika.
+ * Zapisuje dokument. Mail: nigdy cały plik .msg/.eml - tylko treść jako tekst (stan "tylko_tekst"), a załączniki
+ * rekurencyjnie jako osobne dokumenty powiązane z mailem. Śmieci z maila (logo, ikony, wizytówki, podpisy) są
+ * pomijane już przy odczycie, a załączniki odznaczone przy imporcie ("nie wgrywaj") - tutaj. Plik większy niż limit
+ * planu albo nieistotny i większy niż NIEISTOTNY_TYLKO_TEKST_MB: zapisujemy sam tekst z czytelnym komunikatem.
  */
 export async function zapiszDokument(
   plik: WczytanyPlik,
@@ -37,8 +40,13 @@ export async function zapiszDokument(
   const ostrzezenia: string[] = []
   const mail = plik.rodzaj === 'mail'
   const zaDuzy = plik.rozmiar > opcje.limitMb * 1024 * 1024
-  const stan = mail ? 'tylko_tekst' : opcje.pominPlik ? 'tylko_tekst' : zaDuzy ? 'pominiety_limit' : 'zapisany'
+  const istotny = opcje.istotny ?? plik.istotny ?? !['standard_klienta', 'korespondencja'].includes(opcje.typ ?? plik.typSugerowany)
+  const duzyNieistotny = !mail && !istotny && !!plik.tekst.trim() && plik.rozmiar > NIEISTOTNY_TYLKO_TEKST_MB * 1024 * 1024
+  const stan = mail ? 'tylko_tekst' : opcje.pominPlik || duzyNieistotny ? 'tylko_tekst' : zaDuzy ? 'pominiety_limit' : 'zapisany'
   if (zaDuzy && !mail) ostrzezenia.push(`${plik.nazwa}: plik ma ${(plik.rozmiar / 1024 / 1024).toFixed(1)} MB - powyżej limitu ${opcje.limitMb} MB planu. Zapisano tylko wyciągnięty tekst.`)
+  else if (duzyNieistotny) ostrzezenia.push(`${plik.nazwa}: nieistotny plik ${(plik.rozmiar / 1024 / 1024).toFixed(1)} MB - zapisano sam tekst (oszczędność miejsca).`)
+  const odznaczone = plik.zalaczniki.filter((z) => z.wgraj === false).map((z) => ({ nazwa: z.nazwa, rozmiar: z.rozmiar, powod: 'odznaczony przy imporcie' }))
+  const metadane = odznaczone.length ? { ...plik.metadane, pominiete_zalaczniki: [...((plik.metadane.pominiete_zalaczniki as unknown[]) ?? []), ...odznaczone] } : plik.metadane
 
   const { data, error } = await db.from('dokumenty').insert({
     ...powiazanie,
@@ -47,9 +55,9 @@ export async function zapiszDokument(
     mime: plik.mime,
     rozmiar: plik.rozmiar,
     stan,
-    istotny: opcje.istotny ?? plik.istotny ?? !['standard_klienta', 'korespondencja'].includes(opcje.typ ?? plik.typSugerowany),
+    istotny,
     tekst: plik.tekst || null,
-    metadane: plik.metadane,
+    metadane,
   }).select('id, nazwa_pliku, stan, sciezka').single()
   if (error) {
     if (/dokumenty_message_id/.test(error.message)) throw new Error(`Ten mail jest już w bazie (ten sam Message-ID): ${plik.nazwa}`)
@@ -70,7 +78,7 @@ export async function zapiszDokument(
     }
   }
 
-  for (const zal of plik.zalaczniki) {
+  for (const zal of plik.zalaczniki.filter((z) => z.wgraj !== false)) {
     try {
       const { ostrzezenia: o } = await zapiszDokument(zal, { nadrzedny_id: dokument.id }, { limitMb: opcje.limitMb }, db)
       ostrzezenia.push(...o)

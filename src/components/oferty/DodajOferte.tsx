@@ -4,7 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useSlowniki } from '@/lib/slowniki'
 import { liczba } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { base64ZBajtow, przeskalujObraz, renderujStrone, wczytajPlik, wczytajDane, type WczytanyPlik } from '@/lib/dokumenty'
+import { base64ZBajtow, przeskalujObraz, renderujStrone, wczytajPlik, wczytajDane, type PominietyZalacznik, type WczytanyPlik } from '@/lib/dokumenty'
 import { szacujAi, wywolajAi, type KlasyfikacjaMaila, type OfertaAi, type SzacunekAi } from '@/lib/ai'
 import { zapiszDokument } from '@/lib/magazyn'
 import { formularzZAi, pustyFormularz, zapiszOferte, type FormularzOferty as Formularz } from '@/lib/oferty'
@@ -117,7 +117,9 @@ export function DodajOferte({ gotowe }: { gotowe: (ofertaId: string) => void }) 
     // Dokument źródłowy po zapisie oferty (dokument musi być z czymś powiązany).
     if (plik && plik.nazwa !== 'wklejona-tresc.txt') {
       try {
-        const { dokument, ostrzezenia } = await zapiszDokument(plik, { oferta_id: id }, { typ: plik.rodzaj === 'mail' ? 'korespondencja' : 'oferta_dostawcy', istotny: true, limitMb: s.ustawienia.limity_planu.plik_mb })
+        // Z maila: treść jako tekst i tylko zaznaczone załączniki (oferta) - bez logo, stopek i reszty maila.
+        const doZapisu = plik.rodzaj === 'mail' ? { ...plik, zalaczniki: plik.zalaczniki.map((z) => ({ ...z, wgraj: wybrane.has(z.nazwa) })) } : plik
+        const { dokument, ostrzezenia } = await zapiszDokument(doZapisu, { oferta_id: id }, { typ: plik.rodzaj === 'mail' ? 'korespondencja' : 'oferta_dostawcy', istotny: true, limitMb: s.ustawienia.limity_planu.plik_mb })
         await supabase.from('oferty_dostawcow').update({ dokument_id: dokument.id }).eq('id', id)
         if (ostrzezenia.length) window.alert(ostrzezenia.join('\n'))
       } catch (e) {
@@ -184,7 +186,7 @@ export function DodajOferte({ gotowe }: { gotowe: (ofertaId: string) => void }) 
           </div>
           {plik.zalaczniki.length > 0 && (
             <div>
-              <span className="etykieta">Załączniki - zaznacz te, które są ofertą (pójdą do odczytu AI):</span>
+              <span className="etykieta">Załączniki - zaznacz te, które są ofertą (pójdą do odczytu AI i zapiszą się przy ofercie; reszta nie trafi do bazy):</span>
               <ul className="space-y-1">
                 {plik.zalaczniki.map((z) => (
                   <li key={z.nazwa} className="flex items-center gap-2 text-sm">
@@ -196,6 +198,9 @@ export function DodajOferte({ gotowe }: { gotowe: (ofertaId: string) => void }) 
                   </li>
                 ))}
               </ul>
+              {((plik.metadane.pominiete_zalaczniki as PominietyZalacznik[] | undefined) ?? []).length > 0 && (
+                <p className="mt-1 text-xs text-slate-500">Pominięte automatycznie: {((plik.metadane.pominiete_zalaczniki as PominietyZalacznik[]) ?? []).map((x) => `${x.nazwa} (${x.powod})`).join('; ')}.</p>
+              )}
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2">

@@ -28,7 +28,8 @@ export function Instrukcja({ profil }: { profil: Profil }) {
           wycena jedną metodą (jak dotychczasowy arkusz wyceny), zatwierdzenie ceny przez prezesa oraz kalkulacja w Excelu i oferta w Wordzie.
         </p>
         <p className="text-slate-500">
-          Moduły powstają etapami. Pozycje menu oznaczone „moduł powstaje w etapie N” pokazują docelowy układ aplikacji.
+          To wersja demonstracyjna: wycena przygotowana automatycznie jest zawsze <strong>wstępna</strong> - sprawdza ją technolog i dział handlowy,
+          a zatwierdza prezes.
         </p>
       </Rozdzial>
 
@@ -51,6 +52,37 @@ export function Instrukcja({ profil }: { profil: Profil }) {
           (min. 6 znaków, w tym jeden znak specjalny). Hasło zmienisz ikoną klucza w prawym górnym rogu.
           Jeśli go nie pamiętasz, użyj „Nie pamiętam hasła” na ekranie logowania.
         </p>
+      </Rozdzial>
+
+      <Rozdzial tytul="Skąd się co bierze">
+        <ul className="list-disc space-y-1 pl-5">
+          <li><strong>Ceny materiałów i usług</strong> mają dwa źródła: (1) <em>historia</em> - zakupy z kart dostawy Optimy i wcześniejsze
+            oferty dostawców; (2) <em>oferty bieżące</em> - zebrane przez dział handlowy do tego zapytania. Wycena automatyczna bierze najpierw
+            ofertę do tego zapytania, potem ważną ofertę z bazy, potem ostatni zakup, na końcu ofertę przeterminowaną. Przy każdej pozycji widać
+            źródło (oferta / zakup / ręcznie), dostawcę i datę.</li>
+          <li><strong>Robocizna</strong> - wskaźnik rbh/t: mediana z projektów zrealizowanych (Registo) i zatwierdzonych wycen tego samego typu aparatu;
+            stawka zł/rbh z Ustawień. Gdy danych brak, pole jest puste i trafia na listę do sprawdzenia.</li>
+          <li><strong>Masy</strong> - z wymiarów i gęstości gatunku (Ustawienia → Gatunki), z list materiałowych rysunków albo z karty analizy.</li>
+          <li><strong>Wymagania, usługi, terminy, pytania do klienta</strong> - z dokumentów zapytania (karta analizy: AI albo ręcznie).</li>
+          <li><strong>Narzuty, zysk, zaokrąglenie, warunki oferty, dane firmy i logo</strong> - z Ustawień; w konkretnej wycenie można je zmienić.</li>
+          <li><strong>Kursy walut</strong> - NBP (oferta w EUR liczy się po kursie z dnia oferty).</li>
+        </ul>
+      </Rozdzial>
+
+      <Rozdzial tytul="Jak przygotować pliki i maile (miejsce w bazie)">
+        <ul className="list-disc space-y-1 pl-5">
+          <li>Z maila aplikacja zapisuje <strong>treść jako tekst</strong> i <strong>zaznaczone załączniki</strong> - nigdy całego pliku .msg/.eml.</li>
+          <li>Logo, ikony i obrazki ze stopki, wizytówki (.vcf), podpisy cyfrowe (.p7s), zaproszenia (.ics), winmail.dat są pomijane automatycznie -
+            lista pominiętych jest widoczna w oknie importu. Każdy inny załącznik, który nie jest dokumentem zapytania (reklama, katalog, regulamin),
+            odznacz w kolumnie <em>wgraj</em>.</li>
+          <li>Pliki nieistotne dla wyceny (długie obliczenia, standardy klienta) większe niż 2 MB zapisują się <strong>jako sam tekst</strong> - dalej
+            można je przeszukać, a nie zajmują miejsca. Limit jednego pliku to 50 MB (plan Free: 1 GB na wszystkie pliki).</li>
+          <li>Rysunki: najlepiej <strong>PDF z CAD</strong> (aplikacja czyta tekst bez AI i bez kosztów). Skan - w pełnej rozdzielczości, jeden arkusz
+            na stronę, bez obrotu; arkusz A1 zapisany jako A4 bywa nieczytelny także dla AI.</li>
+          <li>Archiwa ZIP są rozpakowywane - wgraj tylko te pliki z archiwum, które są potrzebne. Duplikat maila (ten sam Message-ID) nie wgra się drugi raz.</li>
+          <li>Do AI idą tylko dokumenty oznaczone jako <strong>istotne</strong> - oznaczaj jako istotne specyfikację, rysunki, formularz ofertowy, kartę danych;
+            ogólne standardy i regulaminy zostaw nieistotne (taniej i dokładniej).</li>
+        </ul>
       </Rozdzial>
 
       <Rozdzial tytul="Zapytania">

@@ -33,6 +33,14 @@ describe('dobór ceny z bazy', () => {
     expect(bezWaznych).toMatchObject({ cena_jedn: 7, zrodlo_ceny: 'zakup' })
   })
 
+  it('oferta zebrana do tego zapytania ma pierwszeństwo - także po terminie ważności', () => {
+    const zZapytania = [...ceny, wiersz({ klucz: 'do-zo', zrodlo: 'oferta', data: '2025-09-01', waznosc_do: '2025-09-30', cena_pln_kg: 8.2, dostawca: 'Kuźnia ZO', zapytanie_id: 'zo-1' })]
+    expect(dobierzCene({ sekcja: 'blachy', gatunek: 'P265GH', grubosc: 10, jednostka_ceny: 'kg' }, zZapytania, gat, false, DZIS, 'zo-1'))
+      .toMatchObject({ cena_jedn: 8.2, zrodlo_dostawca: 'Kuźnia ZO' })
+    expect(dobierzCene({ sekcja: 'blachy', gatunek: 'P265GH', grubosc: 10, jednostka_ceny: 'kg' }, zZapytania, gat, false, DZIS, 'inne-zo'))
+      .toMatchObject({ cena_jedn: 6.5 })
+  })
+
   it('inne wymiary: dla ceny za kg przybliżona (kategoria + gatunek), dla sztuk brak', () => {
     expect(dobierzCene({ sekcja: 'blachy', gatunek: 'P265GH', grubosc: 40, jednostka_ceny: 'kg' }, ceny, gat, false, DZIS)).toMatchObject({ cena_jedn: 6.5, dopasowanie: 'przyblizone' })
     expect(dobierzCene({ sekcja: 'kolnierze', gatunek: 'P250GH', d_zew: 220, jednostka_ceny: 'jm' }, ceny, gat, false, DZIS)).toMatchObject({ cena_jedn: 180, jednostka_ceny: 'jm' })

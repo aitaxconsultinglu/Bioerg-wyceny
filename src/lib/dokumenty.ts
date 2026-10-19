@@ -26,6 +26,8 @@ export interface WczytanyPlik {
   typSugerowany: TypDokumentu
   /** Znacznik "istotny" ustawiony przez człowieka przed zapisem (import z maila) - inaczej domyślny wg typu. */
   istotny?: boolean
+  /** Załącznik maila odznaczony przy imporcie ("nie wgrywaj") - nie trafia do bazy ani do bucketu. */
+  wgraj?: boolean
 }
 
 const rozszerzenie = (n: string) => n.toLowerCase().split('.').pop() ?? ''
@@ -59,6 +61,25 @@ function mimeZRozszerzenia(nazwa: string) {
 /** Obrazek ze stopki/treści maila (image001.png) - nie jest dokumentem. */
 function toObrazekZeStopki(nazwa: string, rozmiar: number, contentId?: string | null) {
   return /^image\d{3}\.(png|jpe?g|gif)$/i.test(nazwa) || (/\.(png|jpe?g|gif)$/i.test(nazwa) && (rozmiar < 40_000 || !!contentId))
+}
+
+/** Załącznik maila pominięty przy odczycie - lista trafia do metadanych maila (widać ją przy imporcie). */
+export interface PominietyZalacznik { nazwa: string; rozmiar: number; powod: string }
+
+/** Mniejsze obrazki to prawie zawsze logo, ikony i banery ze stopki - skan dokumentu waży więcej. */
+export const MIN_OBRAZ_DOKUMENTU = 150_000
+
+/**
+ * Czy załącznik maila jest "śmieciem" (nie dokumentem zapytania ani oferty): obrazki ze stopki, logo i ikony,
+ * wizytówki, podpisy S/MIME, zaproszenia z kalendarza, winmail.dat, puste pliki. Zwraca powód albo null.
+ */
+export function powodPominieciaZalacznika(nazwa: string, rozmiar: number, contentId?: string | null): string | null {
+  const e = rozszerzenie(nazwa)
+  if (!rozmiar) return 'pusty plik'
+  if (toObrazekZeStopki(nazwa, rozmiar, contentId)) return 'obrazek ze stopki / logo'
+  if (['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp', 'svg', 'emz', 'wmf'].includes(e) && (rozmiar < MIN_OBRAZ_DOKUMENTU || e === 'gif')) return 'mały obrazek (logo, ikona, baner)'
+  if (['vcf', 'p7s', 'p7m', 'p7c', 'ics', 'htm', 'html', 'url', 'lnk', 'dat'].includes(e)) return 'wizytówka, podpis cyfrowy, zaproszenie lub plik techniczny poczty'
+  return null
 }
 
 // --- PDF -------------------------------------------------------------------------------
@@ -149,11 +170,13 @@ async function wczytajMsg(nazwa: string, dane: Uint8Array): Promise<WczytanyPlik
   const czytnik = new MsgReader(dane.buffer.slice(dane.byteOffset, dane.byteOffset + dane.byteLength) as ArrayBuffer)
   const d = czytnik.getFileData()
   const zalaczniki: WczytanyPlik[] = []
+  const pominiete: PominietyZalacznik[] = []
   for (const a of d.attachments ?? []) {
     if (a.innerMsgContent || a.attachmentHidden) continue
     const zal = czytnik.getAttachment(a)
     const nazwaZal = zal.fileName || a.fileName || 'załącznik'
-    if (toObrazekZeStopki(nazwaZal, zal.content.byteLength, a.pidContentId)) continue
+    const powod = powodPominieciaZalacznika(nazwaZal, zal.content.byteLength, a.pidContentId)
+    if (powod) { pominiete.push({ nazwa: nazwaZal, rozmiar: zal.content.byteLength, powod }); continue }
     zalaczniki.push(await wczytajDane(nazwaZal, zal.content))
   }
   const tekst = (d.body ?? '').replace(/\r/g, '').replace(/\n{3,}/g, '\n\n').trim()
@@ -163,6 +186,7 @@ async function wczytajMsg(nazwa: string, dane: Uint8Array): Promise<WczytanyPlik
     metadane: {
       temat: d.subject ?? '', od: d.senderName ?? '', od_email: d.senderEmail ?? '',
       data: d.clientSubmitTime ?? d.messageDeliveryTime ?? null, message_id: messageIdZNaglowkow(d.headers),
+      pominiete_zalaczniki: pominiete,
     },
   }
 }
@@ -171,11 +195,12 @@ async function wczytajEml(nazwa: string, dane: Uint8Array): Promise<WczytanyPlik
   const { default: PostalMime } = await import('postal-mime')
   const mail = await PostalMime.parse(dane)
   const zalaczniki: WczytanyPlik[] = []
+  const pominiete: PominietyZalacznik[] = []
   for (const a of mail.attachments ?? []) {
     const tresc = typeof a.content === 'string' ? new TextEncoder().encode(a.content) : new Uint8Array(a.content)
     const nazwaZal = a.filename || 'załącznik'
-    if (a.disposition === 'inline' && toObrazekZeStopki(nazwaZal, tresc.byteLength, a.contentId)) continue
-    if (toObrazekZeStopki(nazwaZal, tresc.byteLength, a.contentId)) continue
+    const powod = powodPominieciaZalacznika(nazwaZal, tresc.byteLength, a.contentId)
+    if (powod) { pominiete.push({ nazwa: nazwaZal, rozmiar: tresc.byteLength, powod }); continue }
     zalaczniki.push(await wczytajDane(nazwaZal, tresc))
   }
   const tekst = (mail.text ?? (mail.html ?? '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' '))
@@ -186,6 +211,7 @@ async function wczytajEml(nazwa: string, dane: Uint8Array): Promise<WczytanyPlik
     metadane: {
       temat: mail.subject ?? '', od: mail.from?.name ?? '', od_email: mail.from?.address ?? '',
       data: mail.date ?? null, message_id: mail.messageId ?? null,
+      pominiete_zalaczniki: pominiete,
     },
   }
 }
