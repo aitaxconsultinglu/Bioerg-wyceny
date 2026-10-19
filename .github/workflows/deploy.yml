@@ -33,7 +33,9 @@ jobs:
       - name: Instalacja zależności
         run: npm ci
 
-      - name: Strażnik poufności (dokumenty i klucze w repo)
+      - name: Strażnik poufności (dokumenty, klucze i słowa zakazane w repo)
+        env:
+          ZAKAZANE_SLOWA: ${{ secrets.ZAKAZANE_SLOWA }}
         run: node scripts/sprawdz-pliki.mjs --wszystkie
 
       - name: Testy
@@ -51,6 +53,8 @@ jobs:
         run: npm run build
 
       - name: Strażnik poufności zbudowanej aplikacji
+        env:
+          ZAKAZANE_SLOWA: ${{ secrets.ZAKAZANE_SLOWA }}
         run: node scripts/sprawdz-pliki.mjs --build
 
       - name: Konfiguracja GitHub Pages
