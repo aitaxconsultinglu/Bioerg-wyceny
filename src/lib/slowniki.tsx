@@ -94,12 +94,36 @@ export function kluczGatunku(tekst: string) {
   return tekst.toUpperCase().replace(/[\s.\-_/]/g, '').replace(/^ASTM|^ASME/, '')
 }
 
+/**
+ * Wpis słownika dla zapisu gatunku: dokładnie, a gdy go nie ma - najdłuższy kod będący początkiem zapisu
+ * (rysunki dopisują gatunkowi odmianę i normę: "SA106GRB" -> SA106, "Fe37 B UNI 7070" -> Fe37).
+ */
+export function gatunekZeSlownika(gatunek: string, gatunki: Gatunek[]): Gatunek | null {
+  const k = kluczGatunku(gatunek)
+  const dokladny = gatunki.find((g) => kluczGatunku(g.kod) === k || kluczGatunku(g.grupa) === k)
+  if (dokladny || k.length < 4) return dokladny ?? null
+  return gatunki
+    .filter((g) => kluczGatunku(g.kod).length >= 4 && k.startsWith(kluczGatunku(g.kod)))
+    .sort((a, b) => kluczGatunku(b.kod).length - kluczGatunku(a.kod).length)[0] ?? null
+}
+
 /** Gatunki równoważne (ta sama grupa w słowniku). Nieznany gatunek = tylko on sam. */
 export function rownowazniki(gatunek: string, gatunki: Gatunek[]): string[] {
-  const k = kluczGatunku(gatunek)
-  const trafiony = gatunki.find((g) => kluczGatunku(g.kod) === k || kluczGatunku(g.grupa) === k)
+  const trafiony = gatunekZeSlownika(gatunek, gatunki)
   if (!trafiony) return [gatunek]
   return gatunki.filter((g) => g.grupa === trafiony.grupa).map((g) => g.kod)
+}
+
+/** Rodzaj stali gatunku (słownik, potem oznaczenie: 1.4xxx / 3xx / A2-A4 - nierdzewna, S/P/Fe/St/SA/A + liczba - węglowa); nieznany - null. */
+export function rodzajGatunku(gatunek: string | null | undefined, gatunki: Gatunek[]): string | null {
+  const zapis = (gatunek ?? '').split('/')[0].trim()
+  if (!zapis) return null
+  const g = gatunekZeSlownika(zapis, gatunki)
+  if (g) return g.rodzaj_stali
+  const k = kluczGatunku(zapis)
+  if (/^14\d{3}|^(SA|A)?3[0-2]\d|^A[24](\d\d)?$/.test(k)) return 'nierdzewna'
+  if (/^(S|P)\d{3}|^S?A\d{3}|^FE\d|^ST\d|^10\d{3}/.test(k)) return 'weglowa'
+  return null
 }
 
 /** Gęstość [kg/dm³] gatunku ze słownika; nieznany gatunek - stal węglowa albo nierdzewna z nazwy. */

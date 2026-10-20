@@ -7,6 +7,7 @@ import { klucz, type Aparat, type PozycjaWyceny } from '@/lib/wyceny'
 import { PoleLiczby } from '../PoleLiczby'
 import { Button } from '../ui/button'
 import { ZrodloCeny } from './ZrodloCeny'
+import { SzablonIParametry } from './SzablonIParametry'
 
 interface Props {
   aparat: Aparat
@@ -15,6 +16,8 @@ interface Props {
   zmien: (f: (a: Aparat) => Aparat) => void
   znajdz: (p: PozycjaWyceny) => void
   importuj: () => void
+  /** Zapytanie wyceny - parametry projektu z rysunków (etap 1). */
+  zapytanieId?: string
 }
 
 export function nowaPozycjaMaterialu(sekcja: string, jm = 'szt'): PozycjaWyceny {
@@ -22,7 +25,7 @@ export function nowaPozycjaMaterialu(sekcja: string, jm = 'szt'): PozycjaWyceny 
 }
 
 /** Zakładka Materiały (dla 1 szt.): sekcje kategorii, masa z wymiarów, naddatek %, źródło ceny. */
-export function Materialy({ aparat, par, tylkoOdczyt, zmien, znajdz, importuj }: Props) {
+export function Materialy({ aparat, par, tylkoOdczyt, zmien, znajdz, importuj, zapytanieId }: Props) {
   const s = useSlowniki()
   const koszty = policzAparat(aparat, par)
   const pozycje = aparat.pozycje.filter((p) => p.zakladka === 'materialy')
@@ -45,6 +48,7 @@ export function Materialy({ aparat, par, tylkoOdczyt, zmien, znajdz, importuj }:
 
   return (
     <div className="space-y-4">
+      {zapytanieId && <SzablonIParametry aparat={aparat} zapytanieId={zapytanieId} masaPozycji={koszty.materialy.masa_brutto} tylkoOdczyt={tylkoOdczyt} zmien={zmien} />}
       <div className="flex flex-wrap items-center gap-2">
         {!tylkoOdczyt && (
           <>

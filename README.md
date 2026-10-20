@@ -9,6 +9,20 @@ Nazwa firmy, logo i dane do oferty są wyłącznie w bazie (Ustawienia → Dane 
 - **Frontend:** React 18 + Vite + TypeScript + Tailwind + Radix, GitHub Pages (`.github/workflows/deploy.yml`).
 - **Backend:** Supabase (projekt `zrwouorevhxdtvubniwg`, eu-west-1, plan Free) - Postgres + Auth + RLS + Storage + Edge Functions.
 
+## Tryb pracy: Etap 1 - wycena materiałowa (od 2026-10-20)
+
+Aplikacja działa domyślnie w uproszczonym trybie: **odczyt rysunków z załączników zapytania → lista materiałów i parametry
+projektu wg szablonu (wymiennik płaszczowo-rurowy / zbiornik) → ceny tylko z kart dostawy Optimy i ofert na materiały
+zebranych do tego zapytania**. Robocizna, kooperacja i usługi, oferta Word, zatwierdzanie, analiza, przygotowanie
+automatyczne i zapytania do dostawców są ukryte (nie usunięte) - przełącznik: Ustawienia → Narzuty i parametry → Tryb aplikacji.
+Pełna wersja: tag `wersja-pelna-2026-10-20`, spis funkcji: [`docs/FUNKCJE.md`](docs/FUNKCJE.md).
+
+- Przycisk **„Wycena materiałowa”** na karcie zapytania: `src/lib/wycenaMaterialowa.ts` (bez AI - PDF z CAD czytane
+  z warstwy tekstowej przez `src/lib/odczytTekstowy.ts`; skany - z odczytów zapisanych w „Rysunki i listy”).
+- Szablony elementów i kontrola kompletności: `src/lib/szablony.ts`, panel nad listą Materiały: `wycena/SzablonIParametry.tsx`.
+- Cennik etapu 1: `cennikEtapu1` i `dobierzCene(..., innyGatunek)` w `src/lib/bazaCen.ts` (kolejność: oferty do zapytania →
+  zakupy Optimy z równoważnikami gatunku i tą samą wielkością DN → cena zastępcza tego samego rodzaju stali, z dopiskiem).
+
 ## Stan prac
 
 | Etap | Zakres | Stan |

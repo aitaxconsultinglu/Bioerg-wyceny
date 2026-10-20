@@ -81,3 +81,28 @@ Repozytorium jest publiczne: pytania nie zawierają nazw firmy, klientów, dosta
 31. **Lista e-maili pierwszych użytkowników i ich role.**
 32. **Nazwa repozytorium i adres aplikacji.** Adres GitHub Pages zawiera nazwę repozytorium. Po zmianie nazwy repozytorium
     trzeba uaktualnić Site URL i Redirect URLs w Supabase (pkt 29).
+
+## Etap 1 - wycena materiałowa (do technologów i działu handlowego)
+
+33. **Masy elementów.** Rysunki złożeniowe z CAD w przykładowych zapytaniach mają tabelę materiałów (element → gatunek),
+    tabelę króćców i dane projektowe (w tym masę pustą), ale nie mają wykazu części z masami. Skąd dziś bierzecie masy
+    płaszcza, den, ścian sitowych: z własnego zestawienia, z wymiarów na rysunku, od klienta?
+    *Założenie: technolog wpisuje wymiary albo masę w zakładce Materiały; aplikacja liczy masę z wymiarów i porównuje sumę z masą pustą z rysunku.*
+34. **Typowe udziały mas elementów** w masie pustej (np. dla zbiornika: płaszcz, dna, dach, konstrukcja; dla wymiennika:
+    płaszcz, ściany sitowe, rurki, dennice, kołnierze). Pozwoliłyby rozdzielić masę pustą z rysunku na elementy już przy
+    pierwszej wycenie. *Założenie: aplikacja nie zgaduje mas - pozycje bez masy są na liście do uzupełnienia.*
+35. **Szablony elementów.** Czy lista elementów jest kompletna i w dobrej kolejności?
+    Wymiennik: króćce, kołnierze, ściany sitowe, rurki, płaszcz, dennice/pokrywy komór, przegrody, ściągi i odległościówki,
+    podpory, wzmocnienia, śruby, uszczelki, inne. Zbiornik: króćce, kołnierze, włazy, płaszcz, dno, dach, konstrukcja wsporcza,
+    podesty i drabiny, wzmocnienia, śruby, uszczelki, inne.
+36. **Ceny zastępcze.** Gdy gatunku z rysunku nie ma w zakupach z Optimy, materiał na kg dostaje cenę innego gatunku tego samego
+    rodzaju stali (np. blacha SA516 wg zakupu S235JR), z dopiskiem „potwierdź ofertą”. Czy tak może być w wycenie wstępnej,
+    czy lepiej zostawić pozycję bez ceny? *Założenie: cena zastępcza z dopiskiem.*
+37. **Zakupy stali węglowej w Optimie.** Wczytane karty dostawy to głównie stal nierdzewna; dla aparatów z SA516 / A105 / A106
+    brakuje cen kołnierzy, rur i dennic. Czy można wczytać karty dostawy z innych lat / zleceń ze stalą węglową?
+38. **Rury króćców.** Tabela króćców podaje średnicę i grubość, ale nie długość. Czy przyjmujecie standardową długość
+    (np. 150-300 mm wg DN), czy zawsze z rysunku? *Założenie: długość wpisuje technolog.*
+39. **Śruby i uszczelki** - wyceniane kompletami na króciec (wg DN i PN) czy jedną kwotą na aparat?
+    *Założenie: jedna pozycja na aparat, cena z oferty albo ręcznie.*
+40. **Dawne oznaczenia gatunków** (Fe37, Fe360, St3S) dodano do słownika jako równoważniki S235JR. Czy na rysunkach
+    zdarzają się inne stare oznaczenia, które trzeba dopisać?

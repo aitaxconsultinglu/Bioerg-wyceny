@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { ETYKIETY_ROLI, uprawnienia, type Profil } from '@/lib/types'
+import { useModuly } from '@/lib/moduly'
 
 function Rozdzial({ tytul, children }: { tytul: string; children: ReactNode }) {
   return (
@@ -13,6 +14,7 @@ function Rozdzial({ tytul, children }: { tytul: string; children: ReactNode }) {
 /** Krótka instrukcja dla użytkowników - rozbudowywana z każdym etapem. */
 export function Instrukcja({ profil }: { profil: Profil }) {
   const up = uprawnienia(profil)
+  const { tryb } = useModuly()
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <h2 className="text-lg font-semibold">Instrukcja</h2>
@@ -32,6 +34,34 @@ export function Instrukcja({ profil }: { profil: Profil }) {
           a zatwierdza prezes.
         </p>
       </Rozdzial>
+
+      {tryb === 'etap1' && (
+        <Rozdzial tytul="Etap 1: wycena materiałowa krok po kroku">
+          <p>
+            Na tym etapie aplikacja wycenia <strong>same materiały</strong> wymiennika płaszczowo-rurowego albo zbiornika. Robocizna, kooperacja,
+            usługi, oferta dla klienta i zatwierdzanie są ukryte (wrócą w kolejnych etapach - administrator może je włączyć w Ustawieniach).
+          </p>
+          <ol className="list-decimal space-y-1 pl-5">
+            <li><strong>Zapytanie</strong> - dodaj ręcznie albo „Nowe z maila” (treść maila + wybrane załączniki; logo i stopki są pomijane).</li>
+            <li><strong>Rysunki</strong> - w zakładce Dokumenty rysunki PDF mają typ „rysunek”. Rysunki z CAD są czytane z warstwy tekstowej
+              bez kosztu AI. Skan (sam obraz) odczytaj w zakładce „Rysunki i listy” - tam AI, z kosztem pokazanym przed wywołaniem.</li>
+            <li><strong>Oferty na materiały specyficzne</strong> (dennice, rurki, odkuwki, kołnierze) - dodaj w „Oferty na materiały”
+              z przypisaniem do tego zapytania. Mają pierwszeństwo przed cenami z Optimy.</li>
+            <li><strong>„Wycena materiałowa”</strong> na karcie zapytania - wybierz typ aparatu (szablon). Aplikacja odczyta tabelę materiałów,
+              tabelę króćców i dane projektowe, ułoży listę wg szablonu i dobierze ceny.</li>
+            <li><strong>Uzupełnij</strong> w zakładce Materiały: wymiary albo masy (pozycje z ilością 0), długości rur króćców,
+              brakujące ceny (Znajdź cenę). Panel szablonu nad listą pokazuje, których elementów brakuje, a „Parametry projektu” -
+              dane z rysunku i masę pustą do porównania z sumą mas pozycji.</li>
+            <li><strong>Excel</strong> - eksport kalkulacji materiałów.</li>
+          </ol>
+          <p>
+            <strong>Skąd ceny:</strong> (1) oferty zebrane do tego zapytania, (2) karty dostawy Optimy (ceny z przeszłych zleceń) - ten sam gatunek
+            lub jego równoważnik ze słownika, kołnierze tej samej wielkości DN. Gdy gatunku z rysunku nie ma w zakupach, materiał wyceniany na kg
+            dostaje <em>cenę zastępczą</em> innego gatunku tego samego rodzaju stali (np. blacha SA516 wg zakupów S235JR) z dopiskiem w uwagach -
+            taką cenę trzeba potwierdzić ofertą. Śruby, uszczelki i kołnierze bez wielkości nie dostają ceny automatycznie.
+          </p>
+        </Rozdzial>
+      )}
 
       <Rozdzial tytul="Role">
         <ul className="list-disc space-y-1 pl-5">

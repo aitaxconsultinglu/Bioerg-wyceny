@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { DostawcaSlownikow, useSlowniki } from '@/lib/slowniki'
 import { ETYKIETY_ROLI, uprawnienia, type Profil } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { useModuly } from '@/lib/moduly'
 import { Logowanie } from './components/Logowanie'
 import { UstawHaslo } from './components/UstawHaslo'
 import { NowaWersja } from './components/NowaWersja'
@@ -121,16 +122,17 @@ export default function App() {
 function Aplikacja({ profil, zmienHaslo }: { profil: Profil; zmienHaslo: () => void }) {
   const { gotowe, blad, odswiez, ustawienia } = useSlowniki()
   const firma = ustawienia?.firma
+  const { widac } = useModuly()
   const [{ widok, id }, ustawWidok] = useWidok()
   const up = uprawnienia(profil)
 
   const zakladki: { id: Widok; etykieta: string; grupa?: string }[] = [
     { id: 'zapytania', etykieta: 'Zapytania i wyceny' },
-    ...(profil.rola === 'prezes' ? [{ id: 'zatwierdzanie' as Widok, etykieta: 'Do zatwierdzenia' }] : []),
-    { id: 'oferty', etykieta: 'Oferty dostawców', grupa: 'Baza cen' },
+    ...(profil.rola === 'prezes' && widac('zatwierdzanie') ? [{ id: 'zatwierdzanie' as Widok, etykieta: 'Do zatwierdzenia' }] : []),
     { id: 'zakupy', etykieta: 'Zakupy (Optima)', grupa: 'Baza cen' },
-    { id: 'uslugi', etykieta: 'Usługi kooperacyjne', grupa: 'Baza cen' },
-    { id: 'projekty', etykieta: 'Projekty zrealizowane' },
+    { id: 'oferty', etykieta: widac('uslugi') ? 'Oferty dostawców' : 'Oferty na materiały', grupa: 'Baza cen' },
+    ...(widac('uslugi') ? [{ id: 'uslugi' as Widok, etykieta: 'Usługi kooperacyjne', grupa: 'Baza cen' }] : []),
+    ...(widac('projekty') ? [{ id: 'projekty' as Widok, etykieta: 'Projekty zrealizowane' }] : []),
     ...(up.ustawienia ? [{ id: 'ustawienia' as Widok, etykieta: 'Ustawienia' }] : []),
     ...(up.uzytkownicy ? [{ id: 'uzytkownicy' as Widok, etykieta: 'Użytkownicy' }] : []),
     { id: 'instrukcja', etykieta: 'Instrukcja' },

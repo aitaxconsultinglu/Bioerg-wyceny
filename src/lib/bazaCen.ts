@@ -3,7 +3,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabase } from './supabase'
 import { komunikatPL } from './config'
-import { kluczGatunku, rownowazniki } from './slowniki'
+import { kluczGatunku, rodzajGatunku, rownowazniki } from './slowniki'
 import type { Gatunek } from './types'
 import type { JednostkaCeny } from './kalkulacja'
 
@@ -238,17 +238,32 @@ export interface PozycjaDoCeny {
   gatunek?: string | null
   d_zew?: number | null
   grubosc?: number | null
+  /** Średnica nominalna (DN100, 4", NPS 4) - kołnierze i armatura muszą mieć tę samą wielkość. */
+  dn?: string | null
   jednostka_ceny: JednostkaCeny
+}
+
+const CALE_NA_DN: Record<string, number> = { '1/2': 15, '3/4': 20, '1': 25, '1.1/4': 32, '1 1/4': 32, '1.1/2': 40, '1 1/2': 40, '2': 50, '2.1/2': 65, '3': 80, '4': 100, '5': 125, '6': 150, '8': 200, '10': 250, '12': 300, '14': 350, '16': 400, '18': 450, '20': 500, '24': 600 }
+
+/** Średnica nominalna jako liczba DN: "DN100" / "100" (pole DN z Optimy) -> 100, "4''" / '4"' / "NPS 4" -> 100; null, gdy nie da się ustalić. */
+export function dnLiczba(s: string | null | undefined): number | null {
+  const t = (s ?? '').replace(/\s+/g, ' ').trim()
+  if (/^\d{1,4}$/.test(t)) return Number(t)
+  const dn = /DN\s?(\d{1,4})/i.exec(t)
+  if (dn) return Number(dn[1])
+  const cal = /(?:NPS\s?)?(\d{1,2}(?:[. ]\d\/\d)?|\d\/\d)\s?(?:''|"|”|cal|in\b)/i.exec(t) ?? /NPS\s?(\d{1,2}(?:[. ]\d\/\d)?)/i.exec(t)
+  return cal ? CALE_NA_DN[cal[1].replace(' ', '.')] ?? CALE_NA_DN[cal[1]] ?? null : null
 }
 
 /**
  * Automatyczny dobór ceny (wstępna wycena): ta sama kategoria, gatunek z równoważnikami i wymiary ±15%.
  * Kolejność: oferty zebrane do tego zapytania (`zapytanieId`) → ważne oferty (najnowsze) → zakupy (najnowsze)
  * → przeterminowane oferty. Gdy wymiarów nie ma w bazie, dla cen za kg wystarcza kategoria + gatunek
- * (dopasowanie przybliżone). Brak kategorii = brak ceny.
+ * (dopasowanie przybliżone). Z `innyGatunek` (wycena materiałowa): gdy gatunku nie ma w bazie, cena innego gatunku
+ * tego samego rodzaju stali (np. blacha SA516 wg zakupów P265GH / S235JR) - do potwierdzenia ofertą. Brak kategorii = brak ceny.
  */
-export function dobierzCene(p: PozycjaDoCeny, wiersze: WierszCeny[], gatunki: Gatunek[], uslugi = false, dzis = new Date().toISOString().slice(0, 10), zapytanieId: string | null = null)
-  : (WybranaCena & { dopasowanie: 'dokladne' | 'przyblizone' }) | null {
+export function dobierzCene(p: PozycjaDoCeny, wiersze: WierszCeny[], gatunki: Gatunek[], uslugi = false, dzis = new Date().toISOString().slice(0, 10), zapytanieId: string | null = null, innyGatunek = false)
+  : (WybranaCena & { dopasowanie: 'dokladne' | 'przyblizone' | 'inny_gatunek' }) | null {
   if (!p.sekcja) return null
   const zakres = uslugi ? wiersze.filter((w) => w.kategoria_uslugi) : wiersze.filter((w) => !w.kategoria_uslugi)
   const miara = (w: WierszCeny) => (uslugi ? w.wartosc_pln
@@ -260,16 +275,38 @@ export function dobierzCene(p: PozycjaDoCeny, wiersze: WierszCeny[], gatunki: Ga
     { d_zew: p.d_zew ?? null, grubosc: p.grubosc ?? null, dopasowanie: 'dokladne' },
     ...(!uslugi && p.jednostka_ceny === 'kg' && (p.d_zew || p.grubosc) ? [{ d_zew: null, grubosc: null, dopasowanie: 'przyblizone' as const }] : []),
   ]
+  const dnPoz = uslugi ? null : dnLiczba(p.dn)
   for (const proba of proby) {
     const kandydaci = filtrujCeny(zakres, {
       ...PUSTY_FILTR, kategoria: `${uslugi ? 'u' : 'm'}:${p.sekcja}`, gatunek: uslugi ? '' : p.gatunek ?? '',
       d_zew: proba.d_zew, grubosc: proba.grubosc, tolerancja_proc: 15,
     }, gatunki, dzis)
       .filter((w) => miara(w) !== null && Number(miara(w)) > 0)
+      // Wielkość nominalna: kołnierz DN100 nie dostaje ceny kołnierza DN25.
+      .filter((w) => !dnPoz || dnLiczba(w.dn ?? w.opis) === dnPoz)
       .sort((a, b) => ranga(a) - ranga(b) || (b.data ?? '').localeCompare(a.data ?? ''))
     if (kandydaci.length) return { ...cenaZWiersza(kandydaci[0], p.jednostka_ceny, uslugi), dopasowanie: proba.dopasowanie }
   }
+  const rodzaj = innyGatunek && !uslugi ? rodzajGatunku(p.gatunek, gatunki) : null
+  if (rodzaj) {
+    const kg = p.jednostka_ceny === 'kg'
+    const kandydaci = filtrujCeny(zakres, {
+      ...PUSTY_FILTR, kategoria: `m:${p.sekcja}`, d_zew: kg ? null : p.d_zew ?? null, grubosc: kg ? null : p.grubosc ?? null, tolerancja_proc: 15,
+    }, gatunki, dzis)
+      .filter((w) => miara(w) !== null && Number(miara(w)) > 0 && rodzajGatunku(w.gatunek, gatunki) === rodzaj)
+      .filter((w) => !dnPoz || dnLiczba(w.dn ?? w.opis) === dnPoz)
+      .sort((a, b) => ranga(a) - ranga(b) || (b.data ?? '').localeCompare(a.data ?? ''))
+    if (kandydaci.length) return { ...cenaZWiersza(kandydaci[0], p.jednostka_ceny, uslugi), dopasowanie: 'inny_gatunek' }
+  }
   return null
+}
+
+/**
+ * Cennik etapu 1 (wycena materiałowa): tylko materiały - zakupy z kart dostawy Optimy (ceny z przeszłych zleceń)
+ * i oferty zebrane do tego zapytania (materiały specyficzne: dennice, rurki, odkuwki...). Bez usług i ofert z innych zapytań.
+ */
+export function cennikEtapu1(wiersze: WierszCeny[], zapytanieId: string | null) {
+  return wiersze.filter((w) => !w.kategoria_uslugi && (w.zrodlo === 'zakup' || (!!zapytanieId && w.zapytanie_id === zapytanieId)))
 }
 
 /** Wiek ceny w miesiącach (do oznaczania cen nieaktualnych). */

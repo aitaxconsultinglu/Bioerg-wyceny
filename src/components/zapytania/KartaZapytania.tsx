@@ -16,6 +16,8 @@ import { RysunkiZapytania } from '../rysunki/RysunkiZapytania'
 import { ZapytaniaDoDostawcow } from '../zapytaniaDostawcow/ZapytaniaDoDostawcow'
 import { PrzygotowanieAutomatyczne } from './PrzygotowanieAutomatyczne'
 import { FLAGA_PRZYGOTUJ } from './NoweZMaila'
+import { WycenaMaterialowa } from './WycenaMaterialowa'
+import { useModuly } from '@/lib/moduly'
 
 interface Zapytanie {
   id: string; numer: string; klient_id: string | null; przedmiot: string; nr_zapytania_klienta: string | null
@@ -36,6 +38,8 @@ const zPola = (v: string) => (v ? new Date(v).toISOString() : null)
 
 export function KartaZapytania({ id, profil, zamknij, otworzWycene }: { id: string; profil: Profil; zamknij: () => void; otworzWycene: (id: string) => void }) {
   const up = uprawnienia(profil)
+  const { widac } = useModuly()
+  const [materialowa, setMaterialowa] = useState(false)
   const [z, setZ] = useState<Zapytanie | null>(null)
   const [klienci, setKlienci] = useState<{ id: string; nazwa: string }[]>([])
   const [ludzie, setLudzie] = useState<{ id: string; nazwa: string }[]>([])
@@ -125,13 +129,25 @@ export function KartaZapytania({ id, profil, zamknij, otworzWycene }: { id: stri
         <Button rozmiar="maly" wariant="cichy" onClick={zamknij}><ArrowLeft className="h-4 w-4" /> Lista</Button>
         <h2 className="text-lg font-semibold">{z.numer}</h2>
         <span className="text-slate-600">{z.przedmiot}</span>
-        <Button rozmiar="maly" wariant="akcent" className="ml-auto" onClick={() => setPrzygotowanie('reczne')}
-          title="Analiza zapytania, listy z rysunków, wstępna wycena i projekt oferty - do weryfikacji">
-          <Sparkles className="h-4 w-4" /> Przygotuj automatycznie
-        </Button>
+        {widac('wycenaMaterialowa') && (
+          <Button rozmiar="maly" wariant="akcent" className="ml-auto" onClick={() => setMaterialowa(true)}
+            title="Lista materiałów i parametry z rysunków, ceny z kart dostawy Optimy i ofert do tego zapytania">
+            <Sparkles className="h-4 w-4" /> Wycena materiałowa
+          </Button>
+        )}
+        {widac('przygotowanie') && (
+          <Button rozmiar="maly" wariant="akcent" className={widac('wycenaMaterialowa') ? '' : 'ml-auto'} onClick={() => setPrzygotowanie('reczne')}
+            title="Analiza zapytania, listy z rysunków, wstępna wycena i projekt oferty - do weryfikacji">
+            <Sparkles className="h-4 w-4" /> Przygotuj automatycznie
+          </Button>
+        )}
       </div>
+      {widac('wycenaMaterialowa') && (
+        <WycenaMaterialowa otwarty={materialowa} zamknij={() => setMaterialowa(false)} zapytanie={{ id, numer: z.numer, przedmiot: z.przedmiot, status: z.status }}
+          otworzWycene={otworzWycene} poZakonczeniu={() => void wczytaj()} />
+      )}
       <PrzygotowanieAutomatyczne
-        otwarty={!!przygotowanie} odRazu={przygotowanie === 'po_imporcie'} zamknij={() => setPrzygotowanie(null)}
+        otwarty={!!przygotowanie && widac('przygotowanie')} odRazu={przygotowanie === 'po_imporcie'} zamknij={() => setPrzygotowanie(null)}
         zapytanie={{ id, numer: z.numer, przedmiot: z.przedmiot, klient: klienci.find((k) => k.id === z.klient_id)?.nazwa ?? null, klient_id: z.klient_id, nr_zapytania_klienta: z.nr_zapytania_klienta, termin_oferty: z.termin_oferty, status: z.status }}
         widziMarze={up.widziMarze} otworzWycene={otworzWycene} otworzZakladke={(k) => { setGeneratorZAnalizy(false); setZakladka(k) }}
         poZakonczeniu={() => void wczytaj()}
@@ -177,7 +193,7 @@ export function KartaZapytania({ id, profil, zamknij, otworzWycene }: { id: stri
       </section>
 
       <div className="flex flex-wrap gap-1 border-b border-slate-200">
-        {([['dokumenty', 'Dokumenty'], ['rysunki', 'Rysunki i listy'], ['analiza', 'Karta analizy'], ['wyceny', `Wyceny (${wersje.length})`], ['dostawcy', 'Zapytania do dostawców'], ['oferty', 'Oferty dostawców'], ['historia', 'Historia zmian']] as [Zakladka, string][]).map(([k, et]) => (
+        {([['dokumenty', 'Dokumenty'], ['rysunki', 'Rysunki i listy'], ...(widac('analiza') ? [['analiza', 'Karta analizy']] : []), ['wyceny', `Wyceny (${wersje.length})`], ...(widac('zapytaniaDostawcow') ? [['dostawcy', 'Zapytania do dostawców']] : []), ['oferty', widac('uslugi') ? 'Oferty dostawców' : 'Oferty na materiały'], ['historia', 'Historia zmian']] as [Zakladka, string][]).map(([k, et]) => (
           <button key={k} onClick={() => { setZakladka(k); setGeneratorZAnalizy(false) }}
             className={cn('-mb-px rounded-t-md border px-3 py-1.5 text-sm', zakladka === k ? 'border-slate-200 border-b-white bg-white font-medium' : 'border-transparent text-slate-600 hover:bg-slate-100')}>{et}</button>
         ))}

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSlowniki } from '@/lib/slowniki'
 import { dataPL, liczba } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { cenaZWiersza, filtrujCeny, PUSTY_FILTR, wczytajCeny, wiekMiesiecy, type WierszCeny, type WybranaCena } from '@/lib/bazaCen'
+import { cenaZWiersza, cennikEtapu1, filtrujCeny, PUSTY_FILTR, wczytajCeny, wiekMiesiecy, type WierszCeny, type WybranaCena } from '@/lib/bazaCen'
 import type { PozycjaWyceny } from '@/lib/wyceny'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../ui/dialog'
 import { KolumnaWymagan, opisWymiarow } from '../oferty/Porownywarka'
@@ -20,17 +20,22 @@ export function cenyZBazy(odswiez = false) {
  * "Znajdź cenę": dopasowane pozycje z ofert i zakupów (kategoria + gatunek z równoważnikami +
  * zbliżone wymiary). Klik kopiuje cenę i źródło do wiersza wyceny - kopia, nie referencja.
  */
-export function ZnajdzCene({ pozycja, uslugi, zamknij, wybierz }: {
+export function ZnajdzCene({ pozycja, uslugi, zamknij, wybierz, zapytanieId = null, cennikEtapu1: etap1 = false }: {
   pozycja: PozycjaWyceny | null
   uslugi?: boolean
   zamknij: () => void
   wybierz: (c: WybranaCena) => void
+  zapytanieId?: string | null
+  /** Etap 1: domyślnie tylko zakupy z Optimy i oferty do tego zapytania. */
+  cennikEtapu1?: boolean
 }) {
   const s = useSlowniki()
   const [wiersze, setWiersze] = useState<WierszCeny[]>([])
   const [tylkoKategoria, setTylkoKategoria] = useState(true)
   const [tolerancja, setTolerancja] = useState(15)
   const [tekst, setTekst] = useState('')
+  const [tylkoEtap1, setTylkoEtap1] = useState(etap1)
+  useEffect(() => { setTylkoEtap1(etap1) }, [etap1, pozycja])
 
   useEffect(() => { if (pozycja) void cenyZBazy().then((r) => setWiersze(r.wiersze)) }, [pozycja])
   useEffect(() => { setTekst('') }, [pozycja])
@@ -41,19 +46,21 @@ export function ZnajdzCene({ pozycja, uslugi, zamknij, wybierz }: {
   const wynik = useMemo(() => {
     if (!pozycja) return []
     const kat = uslugi ? (pozycja.sekcja ? `u:${pozycja.sekcja}` : '') : pozycja.sekcja ? `m:${pozycja.sekcja}` : ''
-    const zakres = uslugi ? wiersze.filter((w) => w.kategoria_uslugi) : wiersze.filter((w) => !w.kategoria_uslugi)
+    const zakres = uslugi ? wiersze.filter((w) => w.kategoria_uslugi) : tylkoEtap1 ? cennikEtapu1(wiersze, zapytanieId) : wiersze.filter((w) => !w.kategoria_uslugi)
+    const doZapytania = (w: WierszCeny) => (w.zrodlo === 'oferta' && !!zapytanieId && w.zapytanie_id === zapytanieId ? 0 : 1)
     return filtrujCeny(zakres, {
       ...PUSTY_FILTR, tekst, kategoria: tylkoKategoria ? kat : '', gatunek: uslugi ? '' : pozycja.gatunek ?? '',
       d_zew: uslugi ? null : pozycja.d_zew ?? null, grubosc: uslugi ? null : pozycja.grubosc ?? null, tolerancja_proc: tolerancja,
     }, s.gatunki).sort((a, b) => {
-      // Najpierw pozycje z ceną w potrzebnej mierze, potem najtańsze.
+      // Najpierw oferty do tego zapytania, potem pozycje z ceną w potrzebnej mierze, potem najtańsze.
+      if (doZapytania(a) !== doZapytania(b)) return doZapytania(a) - doZapytania(b)
       const x = a[miara] ?? (uslugi ? a.wartosc_pln : null); const y = b[miara] ?? (uslugi ? b.wartosc_pln : null)
       if (x === null && y === null) return 0
       if (x === null) return 1
       if (y === null) return -1
       return x - y
     }).slice(0, 200)
-  }, [pozycja, wiersze, tylkoKategoria, tolerancja, tekst, s.gatunki, uslugi, miara])
+  }, [pozycja, wiersze, tylkoKategoria, tolerancja, tekst, s.gatunki, uslugi, miara, tylkoEtap1, zapytanieId])
 
   const dzis = new Date().toISOString().slice(0, 10)
 
@@ -72,6 +79,7 @@ export function ZnajdzCene({ pozycja, uslugi, zamknij, wybierz }: {
         </DialogDescription>
         <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
           <input className="pole w-56" placeholder="zawęź: opis, dostawca..." value={tekst} onChange={(e) => setTekst(e.target.value)} />
+          {!uslugi && <label className="flex items-center gap-1" title="Etap 1: ceny z przeszłych zleceń (karty dostawy Optimy) i oferty zebrane do tego zapytania"><input type="checkbox" checked={tylkoEtap1} onChange={(e) => setTylkoEtap1(e.target.checked)} /> tylko Optima i oferty do tego zapytania</label>}
           <label className="flex items-center gap-1"><input type="checkbox" checked={tylkoKategoria} onChange={(e) => setTylkoKategoria(e.target.checked)} /> tylko ta kategoria</label>
           {!uslugi && (
             <label className="flex items-center gap-1">wymiary ±
@@ -90,7 +98,7 @@ export function ZnajdzCene({ pozycja, uslugi, zamknij, wybierz }: {
                 const po = w.zrodlo === 'oferta' && !!w.waznosc_do && w.waznosc_do < dzis
                 return (
                   <tr key={w.klucz} onClick={() => wez(w)} className={cn('cursor-pointer hover:bg-limonka-jasna', po ? 'bg-red-50' : stara && 'bg-amber-50')}>
-                    <td className="komorka text-xs">{w.zrodlo}</td>
+                    <td className="komorka text-xs">{w.zrodlo === 'zakup' ? 'Optima' : zapytanieId && w.zapytanie_id === zapytanieId ? <strong>oferta do ZO</strong> : 'oferta'}</td>
                     <td className="komorka whitespace-nowrap text-xs">{dataPL(w.data)}</td>
                     <td className="komorka max-w-[10rem] truncate text-xs">{w.dostawca}</td>
                     <td className="komorka max-w-[20rem] text-xs">{w.opis}</td>

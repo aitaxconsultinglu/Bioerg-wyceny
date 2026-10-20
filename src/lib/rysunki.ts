@@ -252,10 +252,10 @@ export function czesciZTabeli(wiersze: string[][], ramki: (ObszarZrodlowy | null
 const KOLUMNY_KROCCOW: [keyof Omit<KrociecRysunku, 'pewnosc' | 'obszar_zrodlowy'>, RegExp][] = [
   ['oznaczenie', /^(mark|ozn|symbol|nozzle$|króciec$|krociec$|nr|poz|item|tag)/i],
   ['ilosc', /^(qty|quantity|ilo|szt)/i],
-  ['dn', /size|^dn|średn|sredn|nominal|nom\.?\s?d|rozmiar|^ø/i],
+  ['dn', /size|wielko|^dn|średn|sredn|nominal|nom\.?\s?d|rozmiar|^ø/i],
   ['pn', /rating|^pn|clas|klasa|ciśn|cisn/i],
   ['przylacze', /facing|type|typ|przyłącz|przylacz|kołnierz|kolnierz|connection|uszczel/i],
-  ['przeznaczenie', /service|przeznacz|designation|description|opis|funkcj|medium|purpose/i],
+  ['przeznaczenie', /service|obsług|obslug|przeznacz|designation|description|opis|funkcj|medium|purpose/i],
   ['uwagi', /remark|uwag|note/i],
 ]
 
